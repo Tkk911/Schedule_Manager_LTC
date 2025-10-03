@@ -1,0 +1,801 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <title>ระบบจัดตารางเรียนและตารางสอน</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root{
+      --green-main:#10b981;
+      --green-light:#a7f3d0;
+      --green-dark:#065f46;
+      --muted:#4b5563;
+    }
+    body{font-family:"Noto Sans Thai","Segoe UI",Arial,sans-serif;margin:18px;background:#ecfdf5;color:#064e3b}
+    .container{max-width:1200px;margin:0 auto}
+    header{text-align:center;margin-bottom:16px}
+    header img{width:90px}
+    header h1{font-size:22px;margin:6px 0;color:var(--green-dark)}
+    header .sub{font-size:15px;font-weight:600;color:#1e3a8a}
+    header .term{margin-top:6px}
+    header input{border:1px solid #d1fae5;border-radius:6px;padding:4px 6px;font-size:14px;text-align:center;background:#f0fdf4}
+    .card{background:white;border-radius:12px;padding:14px;box-shadow:0 3px 10px rgba(0,0,0,0.08);margin-bottom:14px;border-top:4px solid var(--green-main)}
+    form .row{display:flex;gap:10px;margin-bottom:10px}
+    label{font-size:13px;color:var(--muted);display:block}
+    input[type=text], input[type=number], select{width:100%;padding:8px;border:1px solid #d1fae5;border-radius:6px;font-size:14px;background:#f0fdf4}
+    button{padding:8px 12px;border-radius:8px;border:0;cursor:pointer;font-size:13px;font-weight:600}
+    .btn-primary{background:var(--green-main);color:white}
+    .btn-primary:hover{background:var(--green-dark)}
+    .btn-danger{background:#ef4444;color:white}
+    .btn-secondary{background:#d1fae5;color:var(--green-dark)}
+    .btn-warning{background:#f59e0b;color:white}
+    .btn-info{background:#3b82f6;color:white}
+    table{width:100%;border-collapse:collapse}
+    th,td{border:1px solid #d1fae5;padding:8px;font-size:13px;vertical-align:middle}
+    th{background:#d1fae5}
+    .small{font-size:12px;color:var(--muted)}
+    .tag{display:block;padding:6px;border-radius:6px;margin:3px 0;background:var(--green-light);font-size:12px}
+    .grid-wrap{overflow:auto}
+    .summary{display:flex;gap:12px;flex-wrap:wrap}
+    .summary .box{background:var(--green-light);padding:10px;border-radius:8px;min-width:160px}
+    .tabs{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+    .tab{padding:6px 12px;border-radius:6px;background:#d1fae5;color:#064e3b;cursor:pointer;font-size:13px;font-weight:600}
+    .tab.active{background:var(--green-main);color:white}
+    .layout{display:flex;flex-direction:column;gap:14px}
+    
+    /* การจัดกึ่งกลางสำหรับตารางหลัก */
+    #mainGrid th, #mainGrid td {
+      text-align: center;
+      vertical-align: middle;
+    }
+    #mainGrid th div {
+      font-size: 0.9em;
+    }
+    #mainGrid .tag {
+      text-align: center;
+    }
+    
+    /* สไตล์สำหรับฟอร์มจัดการข้อมูล */
+    .data-management {
+      margin-top: 10px;
+      padding: 10px;
+      border: 1px solid #d1fae5;
+      border-radius: 8px;
+      background: #f0fdf4;
+    }
+    .data-management h4 {
+      margin: 0 0 8px 0;
+      font-size: 14px;
+      color: var(--green-dark);
+    }
+    .data-management .input-group {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .data-management input {
+      flex: 1;
+      padding: 6px;
+      border: 1px solid #a7f3d0;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .data-management button {
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+    .data-list {
+      max-height: 100px;
+      overflow-y: auto;
+      border: 1px solid #d1fae5;
+      border-radius: 4px;
+      padding: 6px;
+      background: white;
+      font-size: 12px;
+    }
+    .data-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+      border-bottom: 1px solid #f0fdf4;
+    }
+    .data-item:last-child {
+      border-bottom: none;
+    }
+    .data-item button {
+      padding: 2px 6px;
+      font-size: 10px;
+    }
+    
+    @media print {
+      #controls, #message, #tabArea, #filterBox {display:none}
+      body{background:white;color:black}
+      .card{box-shadow:none;border:1px solid #ccc}
+      button{display:none}
+      header input{border:0;background:none}
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <img src="logoLTC.png" alt="LTC Logo" />
+      <h2>ระบบจัดการตารางเรียนและตารางสอน</h2>
+      <h1>วิทยาลัยเทคโนโลยีแหลมทอง</h1>
+      <div class="sub">กลุ่มงาน ไฟฟ้าและอิเล็กทรอนิกส์</div>
+      <div class="term">
+        ภาคเรียน:
+        <input type="text" id="termInput" value="ภาคเรียนที่ 1/2568" />
+      </div>
+    </header>
+
+    <div class="layout">
+      <!-- ตารางเรียน/ตารางสอน เต็มพื้นที่ด้านบน -->
+      <div class="card">
+        <h2>ตารางเรียนนักศึกษา / ตารางสอนอาจารย์ / ตารางห้องเรียน </h2>
+        <div id="tabArea" class="tabs">
+          <div class="tab active" data-type="all">ตารางรวม</div>
+          <div class="tab" data-type="teacher">อาจารย์</div>
+          <div class="tab" data-type="class">นักเรียน (ชั้น)</div>
+          <div class="tab" data-type="room">ห้อง</div>
+        </div>
+        <div id="filterBox" style="margin-bottom:10px; display:none;">
+          <select id="filterSelect" style="padding:6px; border-radius:6px; border:1px solid #ccc; width:200px;"></select>
+        </div>
+        <div class="grid-wrap">
+          <table id="mainGrid">
+            <thead>
+              <tr>
+                <th>วัน/เวลา</th>
+                <th>คาบ 1<div>(08:30-09:20)</div></th>
+                <th>คาบ 2<div>(09:20-10:10)</div></th>
+                <th>คาบ 3<div>(10:20-11:10)</div></th>
+                <th>คาบ 4<div>(11:10-12:00)</div></th>
+                <th>พักกลางวัน<div>(12.00-12:50)</div></th>
+                <th>คาบ 5<div>(12:50-13:40)</div></th>
+                <th>คาบ 6<div>(13:40-14:30)</div></th>
+                <th>คาบ 7<div>(14:30-15:20)</div></th>
+              </tr>
+            </thead>
+            <tbody id="gridBody">				
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- layout เดิม: ซ้าย (ฟอร์ม+สรุป) / ขวา (รายการทั้งหมด) -->
+      <div style="display:grid;grid-template-columns:380px 1fr;gap:14px">
+        <div>
+          <div class="card" id="controls">
+            <h2>เพิ่ม/แก้ไข รายการสอน</h2>
+            <form id="lessonForm">
+              <div class="row">
+                <div style="flex:1">
+                  <label>อาจารย์</label>
+                  <select id="teacher" required>
+                    <option value="">เลือกอาจารย์</option>
+                  </select>
+                  <div class="data-management">
+                    <h4>จัดการรายชื่ออาจารย์</h4>
+                    <div class="input-group">
+                      <input type="text" id="newTeacher" placeholder="ชื่ออาจารย์" />
+                      <button type="button" class="btn-info" id="addTeacher">เพิ่ม</button>
+                    </div>
+                    <div class="data-list" id="teacherList"></div>
+                  </div>
+                </div>
+                <div style="flex:1">
+                  <label>ชั้นเรียน</label>
+                  <select id="classLevel" required>
+                    <option value="">เลือกชั้นเรียน</option>
+                  </select>
+                  <div class="data-management">
+                    <h4>จัดการชั้นเรียน</h4>
+                    <div class="input-group">
+                      <input type="text" id="newClass" placeholder="ชื่อชั้นเรียน" />
+                      <button type="button" class="btn-info" id="addClass">เพิ่ม</button>
+                    </div>
+                    <div class="data-list" id="classList"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div style="flex:1">
+                  <label>ชื่อวิชา</label>
+                  <select id="subject" required>
+                    <option value="">เลือกรายวิชา</option>
+                  </select>
+                  <div class="data-management">
+                    <h4>จัดการรายวิชา</h4>
+                    <div class="input-group">
+                      <input type="text" id="newSubject" placeholder="ชื่อรายวิชา" />
+                      <button type="button" class="btn-info" id="addSubject">เพิ่ม</button>
+                    </div>
+                    <div class="data-list" id="subjectList"></div>
+                  </div>
+                </div>
+                <div style="flex:1">
+                  <label>ห้อง</label>
+                  <select id="room" required>
+                    <option value="">เลือกห้อง</option>
+                  </select>
+                  <div class="data-management">
+                    <h4>จัดการห้องเรียน</h4>
+                    <div class="input-group">
+                      <input type="text" id="newRoom" placeholder="ชื่อห้อง" />
+                      <button type="button" class="btn-info" id="addRoom">เพิ่ม</button>
+                    </div>
+                    <div class="data-list" id="roomList"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div style="flex:1">
+                  <label>วัน</label>
+                  <select id="day">
+                    <option value="0">จันทร์</option>
+                    <option value="1">อังคาร</option>
+                    <option value="2">พุธ</option>
+                    <option value="3">พฤหัสบดี</option>
+                    <option value="4">ศุกร์</option>
+                  </select>
+                </div>
+                <div style="flex:1">
+                  <label>คาบ</label>
+                  <select id="period">
+                    <option value="0">คาบ 1</option>
+                    <option value="1">คาบ 2</option>
+                    <option value="2">คาบ 3</option>
+                    <option value="3">คาบ 4</option>
+                    <option value="5">คาบ 5</option>
+                    <option value="6">คาบ 6</option>
+                    <option value="7">คาบ 7</option>
+                  </select>
+                </div>
+              </div>
+              <div class="row">
+                <div style="flex:1">
+                  <label>จำนวนคาบ</label>
+                  <input type="number" id="numPeriods" value="1" min="1" max="7" />
+                </div>
+              </div>
+
+              <div style="display:flex;gap:8px;margin-top:10px">
+                <button class="btn-primary" type="submit" id="submitBtn">บันทึก</button>
+                <button type="button" id="autoBtn" class="btn-primary">เพิ่มอัตโนมัติ</button>
+                <button type="button" id="resetBtn" class="btn-secondary">รีเซ็ต</button>
+                <div style="margin-left:auto;display:flex;gap:6px">
+                  <button type="button" id="exportBtn" class="btn-primary">Export Excel</button>
+                  <button type="button" id="printBtn" class="btn-secondary">Print PDF</button>
+                </div>
+              </div>
+              <div id="message" style="margin-top:10px"></div>
+            </form>
+          </div>
+
+          <div class="card">
+            <h3>สรุปคาบสอน (อาจารย์)</h3>
+            <div id="teacherSummary" class="summary small"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card">
+            <h2>รายการทั้งหมด</h2>
+            <table id="lessonTable">
+              <thead>
+                <tr><th>วิชา</th><th>ครู</th><th>ชั้น</th><th>ห้อง</th><th>วัน</th><th>คาบ</th><th>จัดการ</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<footer>
+      <small>ระบบนี้เก็บข้อมูลในเบราว์เซอร์ (localStorage)</small>
+    </footer>
+
+
+<script>
+const periods=["คาบ 1 (08:30-09:20)","คาบ 2 (09:20-10:10)","คาบ 3 (10:20-11:10)","คาบ 4 (11:10-12:00)","พักกลางวัน","คาบ 5 (12:50-13:40)","คาบ 6 (13:40-14:30)","คาบ 7 (14:30-15:20)"];
+const days=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
+let lessons=[];
+
+// ฐานข้อมูลสำหรับอาจารย์, ชั้นเรียน, รายวิชา, ห้อง
+let teachers = JSON.parse(localStorage.getItem('teachers')) || ['ครูสมชาย', 'ครูสมหญิง', 'ครูนิดา'];
+let classes = JSON.parse(localStorage.getItem('classes')) || ['ปวช.1/1', 'ปวช.1/2', 'ปวช.2/1'];
+let subjects = JSON.parse(localStorage.getItem('subjects')) || ['คณิตศาสตร์', 'วิทยาศาสตร์', 'ภาษาอังกฤษ'];
+let rooms = JSON.parse(localStorage.getItem('rooms')) || ['ห้อง 101', 'ห้อง 102', 'ห้อง Lab 1'];
+
+let currentTab="all";
+let filterValue="";
+let editingId = null; // เก็บ ID ของรายการที่กำลังแก้ไข
+
+// ฟังก์ชันบันทึกข้อมูลลง Local Storage
+function saveData() {
+  localStorage.setItem('teachers', JSON.stringify(teachers));
+  localStorage.setItem('classes', JSON.stringify(classes));
+  localStorage.setItem('subjects', JSON.stringify(subjects));
+  localStorage.setItem('rooms', JSON.stringify(rooms));
+}
+
+// ฟังก์ชันโหลดข้อมูลลง dropdown
+function loadDropdowns() {
+  const teacherSelect = document.getElementById('teacher');
+  const classSelect = document.getElementById('classLevel');
+  const subjectSelect = document.getElementById('subject');
+  const roomSelect = document.getElementById('room');
+  
+  // โหลดข้อมูลอาจารย์
+  teacherSelect.innerHTML = '<option value="">เลือกอาจารย์</option>';
+  teachers.forEach(teacher => {
+    teacherSelect.innerHTML += `<option value="${teacher}">${teacher}</option>`;
+  });
+  
+  // โหลดข้อมูลชั้นเรียน
+  classSelect.innerHTML = '<option value="">เลือกชั้นเรียน</option>';
+  classes.forEach(cls => {
+    classSelect.innerHTML += `<option value="${cls}">${cls}</option>`;
+  });
+  
+  // โหลดข้อมูลรายวิชา
+  subjectSelect.innerHTML = '<option value="">เลือกรายวิชา</option>';
+  subjects.forEach(subject => {
+    subjectSelect.innerHTML += `<option value="${subject}">${subject}</option>`;
+  });
+  
+  // โหลดข้อมูลห้อง
+  roomSelect.innerHTML = '<option value="">เลือกห้อง</option>';
+  rooms.forEach(room => {
+    roomSelect.innerHTML += `<option value="${room}">${room}</option>`;
+  });
+  
+  // โหลดข้อมูลลงลิสต์แสดงผล
+  renderDataLists();
+}
+
+// ฟังก์ชันแสดงข้อมูลในลิสต์
+function renderDataLists() {
+  // อาจารย์
+  const teacherList = document.getElementById('teacherList');
+  teacherList.innerHTML = '';
+  teachers.forEach((teacher, index) => {
+    teacherList.innerHTML += `
+      <div class="data-item">
+        <span>${teacher}</span>
+        <button class="btn-danger" onclick="removeTeacher(${index})">ลบ</button>
+      </div>
+    `;
+  });
+  
+  // ชั้นเรียน
+  const classList = document.getElementById('classList');
+  classList.innerHTML = '';
+  classes.forEach((cls, index) => {
+    classList.innerHTML += `
+      <div class="data-item">
+        <span>${cls}</span>
+        <button class="btn-danger" onclick="removeClass(${index})">ลบ</button>
+      </div>
+    `;
+  });
+  
+  // รายวิชา
+  const subjectList = document.getElementById('subjectList');
+  subjectList.innerHTML = '';
+  subjects.forEach((subject, index) => {
+    subjectList.innerHTML += `
+      <div class="data-item">
+        <span>${subject}</span>
+        <button class="btn-danger" onclick="removeSubject(${index})">ลบ</button>
+      </div>
+    `;
+  });
+  
+  // ห้อง
+  const roomList = document.getElementById('roomList');
+  roomList.innerHTML = '';
+  rooms.forEach((room, index) => {
+    roomList.innerHTML += `
+      <div class="data-item">
+        <span>${room}</span>
+        <button class="btn-danger" onclick="removeRoom(${index})">ลบ</button>
+      </div>
+    `;
+  });
+}
+
+// ฟังก์ชันเพิ่มข้อมูล
+document.getElementById('addTeacher').onclick = () => {
+  const newTeacher = document.getElementById('newTeacher').value.trim();
+  if (newTeacher && !teachers.includes(newTeacher)) {
+    teachers.push(newTeacher);
+    saveData();
+    loadDropdowns();
+    document.getElementById('newTeacher').value = '';
+    document.getElementById('message').innerHTML = '<div style="color:green;">เพิ่มอาจารย์เรียบร้อยแล้ว</div>';
+  }
+};
+
+document.getElementById('addClass').onclick = () => {
+  const newClass = document.getElementById('newClass').value.trim();
+  if (newClass && !classes.includes(newClass)) {
+    classes.push(newClass);
+    saveData();
+    loadDropdowns();
+    document.getElementById('newClass').value = '';
+    document.getElementById('message').innerHTML = '<div style="color:green;">เพิ่มชั้นเรียนเรียบร้อยแล้ว</div>';
+  }
+};
+
+document.getElementById('addSubject').onclick = () => {
+  const newSubject = document.getElementById('newSubject').value.trim();
+  if (newSubject && !subjects.includes(newSubject)) {
+    subjects.push(newSubject);
+    saveData();
+    loadDropdowns();
+    document.getElementById('newSubject').value = '';
+    document.getElementById('message').innerHTML = '<div style="color:green;">เพิ่มรายวิชาเรียบร้อยแล้ว</div>';
+  }
+};
+
+document.getElementById('addRoom').onclick = () => {
+  const newRoom = document.getElementById('newRoom').value.trim();
+  if (newRoom && !rooms.includes(newRoom)) {
+    rooms.push(newRoom);
+    saveData();
+    loadDropdowns();
+    document.getElementById('newRoom').value = '';
+    document.getElementById('message').innerHTML = '<div style="color:green;">เพิ่มห้องเรียบร้อยแล้ว</div>';
+  }
+};
+
+// ฟังก์ชันลบข้อมูล
+function removeTeacher(index) {
+  teachers.splice(index, 1);
+  saveData();
+  loadDropdowns();
+}
+
+function removeClass(index) {
+  classes.splice(index, 1);
+  saveData();
+  loadDropdowns();
+}
+
+function removeSubject(index) {
+  subjects.splice(index, 1);
+  saveData();
+  loadDropdowns();
+}
+
+function removeRoom(index) {
+  rooms.splice(index, 1);
+  saveData();
+  loadDropdowns();
+}
+
+function uid(){return Date.now()+Math.random().toString(16).slice(2)}
+function renderAll(){renderGrid();renderList();renderSummary();}
+
+function renderGrid(){
+  const body=document.getElementById('gridBody'); 
+  body.innerHTML='';
+  days.forEach((d,di)=>{
+    const tr=document.createElement('tr'); 
+    tr.innerHTML=`<td>${d}</td>`;
+    periods.forEach((p,pi)=>{
+      const td=document.createElement('td');
+      if(pi===4){
+        td.innerHTML='<div class="small">พักกลางวัน</div>';
+      }else{
+        let filtered = lessons.filter(l=>l.day===di&&l.period===pi);
+
+        if(currentTab==="teacher" && filterValue){ filtered = filtered.filter(l=>l.teacher===filterValue); }
+        if(currentTab==="class" && filterValue){ filtered = filtered.filter(l=>l.classLevel===filterValue); }
+        if(currentTab==="room" && filterValue){ filtered = filtered.filter(l=>l.room===filterValue); }
+
+        filtered.forEach(it=>{
+          td.innerHTML+=`<div class="tag"><strong>${it.subject}</strong><div class="small">ครู:${it.teacher}|${it.classLevel}|ห้อง:${it.room}</div></div>`;
+        });
+      }
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  });
+}
+
+function renderList(){
+  const tb=document.querySelector('#lessonTable tbody'); tb.innerHTML='';
+  lessons.forEach(l=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${l.subject}</td><td>${l.teacher}</td><td>${l.classLevel}</td><td>${l.room}</td><td>${days[l.day]}</td><td>${periods[l.period]}</td>
+      <td>
+        <button class="btn-warning small edit-btn" data-id="${l.id}" style="margin-right:4px;">แก้ไข</button>
+        <button class="btn-danger small" data-id="${l.id}">ลบ</button>
+      </td>`;
+    tb.appendChild(tr);
+  });
+  
+  // เพิ่ม event สำหรับปุ่มแก้ไข
+  tb.querySelectorAll('.edit-btn').forEach(b=>b.onclick=()=>{
+    const lesson = lessons.find(x=>x.id===b.dataset.id);
+    if(lesson) {
+      editLesson(lesson);
+    }
+  });
+  
+  // ปุ่มลบ
+  tb.querySelectorAll('.btn-danger').forEach(b=>b.onclick=()=>{
+    lessons=lessons.filter(x=>x.id!==b.dataset.id);
+    renderAll();
+    updateFilterOptions();
+  });
+}
+
+function editLesson(lesson) {
+  // เติมข้อมูลลงในฟอร์ม
+  document.getElementById('teacher').value = lesson.teacher;
+  document.getElementById('subject').value = lesson.subject;
+  document.getElementById('classLevel').value = lesson.classLevel;
+  document.getElementById('room').value = lesson.room;
+  document.getElementById('day').value = lesson.day;
+  document.getElementById('period').value = lesson.period;
+  document.getElementById('numPeriods').value = 1;
+  
+  // เปลี่ยนปุ่มบันทึกเป็นอัปเดท
+  editingId = lesson.id;
+  document.getElementById('submitBtn').textContent = 'อัปเดท';
+  document.getElementById('submitBtn').classList.add('btn-warning');
+  document.getElementById('submitBtn').classList.remove('btn-primary');
+  
+  // แสดงข้อความ
+  document.getElementById('message').innerHTML = '<div style="color:#f59e0b;">กำลังแก้ไขรายการสอน...</div>';
+}
+
+function renderSummary(){
+  const div=document.getElementById('teacherSummary'); div.innerHTML='';
+  const map={}; lessons.forEach(l=>map[l.teacher]=(map[l.teacher]||0)+1);
+  Object.entries(map).forEach(([t,c])=>{
+    div.innerHTML+=`<div class="box"><strong>${t}</strong><div class="small">คาบ/สัปดาห์: ${c}</div></div>`;
+  });
+  if(!Object.keys(map).length) div.innerHTML='<div class="small">ยังไม่มีข้อมูล</div>';
+}
+
+function conflict(nl, excludeId = null){
+  return lessons.find(l => 
+    l.id !== excludeId && // ไม่นับรายการที่กำลังแก้ไข
+    l.day === nl.day && 
+    l.period === nl.period && 
+    (l.teacher === nl.teacher || l.room === nl.room || l.classLevel === nl.classLevel)
+  )
+}
+
+// ✅ เพิ่มอัตโนมัติพร้อมจำนวนคาบ - ปรับปรุงแล้ว
+function autoSchedule(nl, numPeriods){
+  let periodsFound = 0;
+  const scheduledPeriods = [];
+  const availableSlots = [];
+  
+  // รวบรวมช่องเวลาว่างทั้งหมด
+  for(let d=0; d<days.length; d++){
+    for(let p=0; p<periods.length; p++){
+      if(p===4) continue; // ข้ามพักกลางวัน
+      
+      const test={...nl,day:d,period:p};
+      if(!conflict(test)){
+        availableSlots.push({day: d, period: p});
+      }
+    }
+  }
+  
+  // ตรวจสอบว่ามีช่องว่างพอหรือไม่
+  if(availableSlots.length < numPeriods) {
+    alert(`ไม่สามารถจัดตารางได้: มีช่องว่างเพียง ${availableSlots.length} คาบ แต่ต้องการ ${numPeriods} คาบ\n\nอาจารย์ ${nl.teacher} มีคาบสอนชนกันในบางเวลา`);
+    return false;
+  }
+  
+  // สุ่มเลือกช่องเวลาตามจำนวนที่ต้องการ
+  for(let i=0; i<numPeriods && availableSlots.length > 0; i++){
+    const randomIndex = Math.floor(Math.random() * availableSlots.length);
+    const slot = availableSlots[randomIndex];
+    
+    const newLesson = {
+      ...nl, 
+      day: slot.day, 
+      period: slot.period, 
+      id: uid()
+    };
+    
+    lessons.push(newLesson);
+    scheduledPeriods.push({day: slot.day, period: slot.period});
+    availableSlots.splice(randomIndex, 1); // ลบช่องที่ใช้แล้ว
+    periodsFound++;
+  }
+  
+  if(periodsFound > 0){
+    renderAll();
+    updateFilterOptions();
+    
+    // แสดงข้อความสรุป
+    let message = `จัดตารางอัตโนมัติสำเร็จ ${periodsFound} คาบ: `;
+    scheduledPeriods.forEach(sp => {
+      message += `${days[sp.day]} ${periods[sp.period]}, `;
+    });
+    document.getElementById('message').innerHTML = `<div style="color:green;">${message}</div>`;
+    
+    return true;
+  } else {
+    alert("ไม่พบเวลาว่างที่สามารถจัดได้ (ทุกวัน-คาบชนกันหมด)");
+    return false;
+  }
+}
+
+// ✅ ฟังก์ชันบันทึก/อัปเดท
+lessonForm.onsubmit=e=>{
+  e.preventDefault();
+  const numPeriods = parseInt(document.getElementById('numPeriods').value) || 1;
+  
+  if(editingId) {
+    // โหมดแก้ไข - อัปเดทรายการเดิม
+    const nl={id:editingId,teacher:teacher.value,subject:subject.value,classLevel:classLevel.value,room:room.value,day:+day.value,period:+period.value};
+    if(nl.period===4)return alert('พักกลางวันไม่สามารถใช้สอนได้');
+    
+    const c=conflict(nl, editingId); 
+    if(c)return alert(`ชนกับ ${c.subject} (ครู:${c.teacher} ห้อง:${c.room})`);
+    
+    // อัปเดทรายการ
+    const index = lessons.findIndex(l => l.id === editingId);
+    if(index !== -1) {
+      lessons[index] = nl;
+    }
+    
+    document.getElementById('message').innerHTML = '<div style="color:green;">อัปเดทรายการสอนเรียบร้อยแล้ว</div>';
+    
+    // รีเซ็ตโหมดแก้ไข
+    editingId = null;
+    document.getElementById('submitBtn').textContent = 'บันทึก';
+    document.getElementById('submitBtn').classList.remove('btn-warning');
+    document.getElementById('submitBtn').classList.add('btn-primary');
+  } else {
+    // โหมดเพิ่มใหม่
+    const nl={id:uid(),teacher:teacher.value,subject:subject.value,classLevel:classLevel.value,room:room.value,day:+day.value,period:+period.value};
+    if(nl.period===4)return alert('พักกลางวันไม่สามารถใช้สอนได้');
+    
+    const c=conflict(nl); 
+    if(c)return alert(`ชนกับ ${c.subject} (ครู:${c.teacher} ห้อง:${c.room})`);
+    
+    lessons.push(nl); 
+    document.getElementById('message').innerHTML = '<div style="color:green;">บันทึกรายการสอนเรียบร้อยแล้ว</div>';
+  }
+  
+  e.target.reset(); 
+  renderAll(); 
+  updateFilterOptions();
+};
+
+autoBtn.onclick=()=>{
+  const numPeriods = parseInt(document.getElementById('numPeriods').value) || 1;
+  const nl={
+    id:uid(),
+    teacher:document.getElementById('teacher').value,
+    subject:document.getElementById('subject').value,
+    classLevel:document.getElementById('classLevel').value,
+    room:document.getElementById('room').value,
+    day:null,
+    period:null
+  };
+  
+  if(!nl.teacher||!nl.subject||!nl.classLevel||!nl.room){
+    return alert("กรอกข้อมูลให้ครบก่อนใช้เพิ่มอัตโนมัติ");
+  }
+  
+  autoSchedule(nl, numPeriods);
+  lessonForm.reset();
+  
+  // รีเซ็ตโหมดแก้ไขถ้ามี
+  if(editingId) {
+    editingId = null;
+    document.getElementById('submitBtn').textContent = 'บันทึก';
+    document.getElementById('submitBtn').classList.remove('btn-warning');
+    document.getElementById('submitBtn').classList.add('btn-primary');
+  }
+};
+
+resetBtn.onclick=()=>{
+  lessonForm.reset();
+  // รีเซ็ตโหมดแก้ไข
+  editingId = null;
+  document.getElementById('submitBtn').textContent = 'บันทึก';
+  document.getElementById('submitBtn').classList.remove('btn-warning');
+  document.getElementById('submitBtn').classList.add('btn-primary');
+  document.getElementById('message').innerHTML = '';
+};
+
+printBtn.onclick=()=>window.print();
+
+// Export Excel
+exportBtn.onclick=()=>{
+  const wb=XLSX.utils.book_new();
+  const term=document.getElementById('termInput').value;
+  const header=["วัน/เวลา","คาบ 1","คาบ 2","คาบ 3","คาบ 4","พักกลางวัน","คาบ 5","คาบ 6","คาบ 7"];
+  const sheetData=[];
+  sheetData.push(["วิทยาลัยเทคโนโลยีแหลมทอง"]);
+  sheetData.push(["ตารางเรียน / ตารางสอน"]);
+  sheetData.push(["ภาคเรียน: "+term]);
+
+  let title="ตารางสอน";
+  let filterLabel="";
+  if(currentTab==="teacher" && filterValue){ title=`ตารางสอนครู_${filterValue}`; filterLabel=`ครู: ${filterValue}`; }
+  if(currentTab==="class" && filterValue){ title=`ตารางเรียน_${filterValue}`; filterLabel=`ชั้น: ${filterValue}`; }
+  if(currentTab==="room" && filterValue){ title=`ตารางห้อง_${filterValue}`; filterLabel=`ห้อง: ${filterValue}`; }
+  if(filterLabel) sheetData.push([filterLabel]);
+
+  sheetData.push([]); 
+  sheetData.push(header);
+
+  days.forEach((d,di)=>{
+    const row=[d];
+    periods.forEach((p,pi)=>{
+      if(pi===4){
+        row.push("พักกลางวัน");
+      }else{
+        let filtered = lessons.filter(l=>l.day===di && l.period===pi);
+        if(currentTab==="teacher" && filterValue){ filtered=filtered.filter(l=>l.teacher===filterValue); }
+        if(currentTab==="class" && filterValue){ filtered=filtered.filter(l=>l.classLevel===filterValue); }
+        if(currentTab==="room" && filterValue){ filtered=filtered.filter(l=>l.room===filterValue); }
+        const cellLessons=filtered.map(l=>`${l.subject} | ${l.teacher} | ${l.classLevel} | ห้อง:${l.room}`).join("\n");
+        row.push(cellLessons);
+      }
+    });
+    sheetData.push(row);
+  });
+
+  const ws=XLSX.utils.aoa_to_sheet(sheetData);
+  XLSX.utils.book_append_sheet(wb,ws,"ตารางสอน");
+  XLSX.writeFile(wb,`${title}.xlsx`);
+};
+
+// Tab Switching
+document.querySelectorAll(".tab").forEach(tab=>{
+  tab.onclick=()=>{
+    document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+    tab.classList.add("active");
+    currentTab=tab.dataset.type;
+    filterValue="";
+    if(currentTab==="all"){
+      document.getElementById("filterBox").style.display="none";
+    }else{
+      document.getElementById("filterBox").style.display="block";
+      updateFilterOptions();
+    }
+    renderGrid();
+  }
+});
+
+function updateFilterOptions(){
+  const sel=document.getElementById("filterSelect");
+  sel.innerHTML="";
+  let set=new Set();
+  if(currentTab==="teacher"){lessons.forEach(l=>set.add(l.teacher));}
+  if(currentTab==="class"){lessons.forEach(l=>set.add(l.classLevel));}
+  if(currentTab==="room"){lessons.forEach(l=>set.add(l.room));}
+  [...set].forEach(v=>{
+    const opt=document.createElement("option");
+    opt.value=v; opt.textContent=v;
+    sel.appendChild(opt);
+  });
+  sel.onchange=()=>{filterValue=sel.value;renderGrid();};
+}
+
+// โหลดข้อมูลเมื่อเริ่มต้น
+loadDropdowns();
+renderAll();
+</script>
+</body>
+</html>
