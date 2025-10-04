@@ -1,6 +1,6 @@
 const periods=["คาบ 1 (08:30-09:20)","คาบ 2 (09:20-10:10)","คาบ 3 (10:20-11:10)","คาบ 4 (11:10-12:00)","พักกลางวัน","คาบ 5 (12:50-13:40)","คาบ 6 (13:40-14:30)","คาบ 7 (14:30-15:20)"];
 const days=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
-let lessons=[];
+let lessons=JSON.parse(localStorage.getItem('lessons')) || [];
 
 // ฐานข้อมูลสำหรับอาจารย์, ชั้นเรียน, รายวิชา, ห้อง
 let teachers = JSON.parse(localStorage.getItem('teachers')) || ['ครูสมชาย', 'ครูสมหญิง', 'ครูนิดา'];
@@ -23,7 +23,93 @@ function saveData() {
   localStorage.setItem('classes', JSON.stringify(classes));
   localStorage.setItem('subjects', JSON.stringify(subjects));
   localStorage.setItem('rooms', JSON.stringify(rooms));
+  localStorage.setItem('lessons', JSON.stringify(lessons));
 }
+
+// ฟังก์ชันดาวน์โหลดข้อมูลเป็น JSON
+function downloadJSON() {
+  const data = {
+    teachers,
+    classes,
+    subjects,
+    rooms,
+    lessons,
+    exportDate: new Date().toISOString(),
+    version: '1.0'
+  };
+  
+  const dataStr = JSON.stringify(data, null, 2);
+  const dataBlob = new Blob([dataStr], {type: 'application/json'});
+  
+  const url = URL.createObjectURL(dataBlob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `timetable_backup_${new Date().toISOString().split('T')[0]}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  
+  document.getElementById('message').innerHTML = '<div style="color:green;">ดาวน์โหลดไฟล์ JSON สำเร็จแล้ว</div>';
+}
+
+// ฟังก์ชันนำเข้าข้อมูลจาก JSON
+function importJSON(file) {
+  const reader = new FileReader();
+  
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      
+      // ตรวจสอบโครงสร้างข้อมูล
+      if (!data.teachers || !data.classes || !data.subjects || !data.rooms || !data.lessons) {
+        throw new Error('รูปแบบไฟล์ไม่ถูกต้อง');
+      }
+      
+      // ยืนยันการนำเข้า (ทับข้อมูลเดิม)
+      if (!confirm('การนำเข้าข้อมูลจะทับข้อมูลปัจจุบันทั้งหมด\nต้องการดำเนินการต่อหรือไม่?')) {
+        return;
+      }
+      
+      // อัปเดทข้อมูล
+      teachers = data.teachers;
+      classes = data.classes;
+      subjects = data.subjects;
+      rooms = data.rooms;
+      lessons = data.lessons;
+      
+      // บันทึกลง Local Storage
+      saveData();
+      
+      // โหลดข้อมูลใหม่
+      loadDropdowns();
+      renderAll();
+      
+      document.getElementById('message').innerHTML = '<div style="color:green;">นำเข้าข้อมูลจาก JSON สำเร็จแล้ว</div>';
+      
+    } catch (error) {
+      console.error('Error importing JSON:', error);
+      document.getElementById('message').innerHTML = `<div style="color:red;">เกิดข้อผิดพลาดในการนำเข้า: ${error.message}</div>`;
+    }
+  };
+  
+  reader.readAsText(file);
+}
+
+// Event Listeners สำหรับปุ่ม JSON
+document.getElementById('downloadJsonBtn').onclick = downloadJSON;
+
+document.getElementById('importJsonBtn').onclick = function() {
+  document.getElementById('jsonFileInput').click();
+};
+
+document.getElementById('jsonFileInput').onchange = function(e) {
+  if (e.target.files.length > 0) {
+    importJSON(e.target.files[0]);
+    // รีเซ็ต input file เพื่อให้สามารถเลือกไฟล์เดิมอีกครั้งได้
+    e.target.value = '';
+  }
+};
 
 // ฟังก์ชันโหลดข้อมูลลง dropdown
 function loadDropdowns() {
