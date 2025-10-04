@@ -184,6 +184,19 @@
     </div>
   </div>
 
+  <!-- Modal สำหรับแก้ไขข้อมูล -->
+  <div id="editModal" class="modal">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <h3 id="modalTitle">แก้ไขข้อมูล</h3>
+      <input type="text" id="editInput" />
+      <div style="display:flex;gap:8px;margin-top:15px">
+        <button class="btn-primary" id="saveEditBtn">บันทึก</button>
+        <button class="btn-secondary" id="cancelEditBtn">ยกเลิก</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="script.js"></script>
 </body>
