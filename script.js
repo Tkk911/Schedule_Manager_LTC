@@ -12,6 +12,11 @@ let currentTab="all";
 let filterValue="";
 let editingId = null; // เก็บ ID ของรายการที่กำลังแก้ไข
 
+// ตัวแปรสำหรับจัดการ Modal แก้ไขข้อมูล
+let currentEditType = null;
+let currentEditIndex = null;
+let originalValue = null;
+
 // ฟังก์ชันบันทึกข้อมูลลง Local Storage
 function saveData() {
   localStorage.setItem('teachers', JSON.stringify(teachers));
@@ -64,7 +69,10 @@ function renderDataLists() {
     teacherList.innerHTML += `
       <div class="data-item">
         <span>${teacher}</span>
-        <button class="btn-danger" onclick="removeTeacher(${index})">ลบ</button>
+        <div>
+          <button class="btn-warning" onclick="editTeacher(${index})">แก้ไข</button>
+          <button class="btn-danger" onclick="removeTeacher(${index})">ลบ</button>
+        </div>
       </div>
     `;
   });
@@ -76,7 +84,10 @@ function renderDataLists() {
     classList.innerHTML += `
       <div class="data-item">
         <span>${cls}</span>
-        <button class="btn-danger" onclick="removeClass(${index})">ลบ</button>
+        <div>
+          <button class="btn-warning" onclick="editClass(${index})">แก้ไข</button>
+          <button class="btn-danger" onclick="removeClass(${index})">ลบ</button>
+        </div>
       </div>
     `;
   });
@@ -88,7 +99,10 @@ function renderDataLists() {
     subjectList.innerHTML += `
       <div class="data-item">
         <span>${subject}</span>
-        <button class="btn-danger" onclick="removeSubject(${index})">ลบ</button>
+        <div>
+          <button class="btn-warning" onclick="editSubject(${index})">แก้ไข</button>
+          <button class="btn-danger" onclick="removeSubject(${index})">ลบ</button>
+        </div>
       </div>
     `;
   });
@@ -100,7 +114,10 @@ function renderDataLists() {
     roomList.innerHTML += `
       <div class="data-item">
         <span>${room}</span>
-        <button class="btn-danger" onclick="removeRoom(${index})">ลบ</button>
+        <div>
+          <button class="btn-warning" onclick="editRoom(${index})">แก้ไข</button>
+          <button class="btn-danger" onclick="removeRoom(${index})">ลบ</button>
+        </div>
       </div>
     `;
   });
@@ -153,28 +170,209 @@ document.getElementById('addRoom').onclick = () => {
 
 // ฟังก์ชันลบข้อมูล
 function removeTeacher(index) {
+  const teacherName = teachers[index];
+  
+  // ตรวจสอบว่ามีการใช้อาจารย์นี้ในตารางเรียนหรือไม่
+  const isUsed = lessons.some(lesson => lesson.teacher === teacherName);
+  
+  if (isUsed) {
+    if (!confirm(`อาจารย์ "${teacherName}" ถูกใช้ในตารางเรียนแล้ว\nการลบอาจส่งผลต่อตารางเรียน\nต้องการลบต่อหรือไม่?`)) {
+      return;
+    }
+  }
+  
   teachers.splice(index, 1);
   saveData();
   loadDropdowns();
+  document.getElementById('message').innerHTML = '<div style="color:green;">ลบอาจารย์เรียบร้อยแล้ว</div>';
 }
 
 function removeClass(index) {
+  const className = classes[index];
+  
+  // ตรวจสอบว่ามีการใช้ชั้นเรียนนี้ในตารางเรียนหรือไม่
+  const isUsed = lessons.some(lesson => lesson.classLevel === className);
+  
+  if (isUsed) {
+    if (!confirm(`ชั้นเรียน "${className}" ถูกใช้ในตารางเรียนแล้ว\nการลบอาจส่งผลต่อตารางเรียน\nต้องการลบต่อหรือไม่?`)) {
+      return;
+    }
+  }
+  
   classes.splice(index, 1);
   saveData();
   loadDropdowns();
+  document.getElementById('message').innerHTML = '<div style="color:green;">ลบชั้นเรียนเรียบร้อยแล้ว</div>';
 }
 
 function removeSubject(index) {
+  const subjectName = subjects[index];
+  
+  // ตรวจสอบว่ามีการใช้รายวิชานี้ในตารางเรียนหรือไม่
+  const isUsed = lessons.some(lesson => lesson.subject === subjectName);
+  
+  if (isUsed) {
+    if (!confirm(`รายวิชา "${subjectName}" ถูกใช้ในตารางเรียนแล้ว\nการลบอาจส่งผลต่อตารางเรียน\nต้องการลบต่อหรือไม่?`)) {
+      return;
+    }
+  }
+  
   subjects.splice(index, 1);
   saveData();
   loadDropdowns();
+  document.getElementById('message').innerHTML = '<div style="color:green;">ลบรายวิชาเรียบร้อยแล้ว</div>';
 }
 
 function removeRoom(index) {
+  const roomName = rooms[index];
+  
+  // ตรวจสอบว่ามีการใช้ห้องนี้ในตารางเรียนหรือไม่
+  const isUsed = lessons.some(lesson => lesson.room === roomName);
+  
+  if (isUsed) {
+    if (!confirm(`ห้อง "${roomName}" ถูกใช้ในตารางเรียนแล้ว\nการลบอาจส่งผลต่อตารางเรียน\nต้องการลบต่อหรือไม่?`)) {
+      return;
+    }
+  }
+  
   rooms.splice(index, 1);
   saveData();
   loadDropdowns();
+  document.getElementById('message').innerHTML = '<div style="color:green;">ลบห้องเรียบร้อยแล้ว</div>';
 }
+
+// ฟังก์ชันแก้ไขข้อมูล
+function editTeacher(index) {
+  currentEditType = 'teacher';
+  currentEditIndex = index;
+  originalValue = teachers[index];
+  
+  document.getElementById('modalTitle').textContent = 'แก้ไขชื่ออาจารย์';
+  document.getElementById('editInput').value = originalValue;
+  document.getElementById('editModal').style.display = 'block';
+}
+
+function editClass(index) {
+  currentEditType = 'class';
+  currentEditIndex = index;
+  originalValue = classes[index];
+  
+  document.getElementById('modalTitle').textContent = 'แก้ไขชื่อชั้นเรียน';
+  document.getElementById('editInput').value = originalValue;
+  document.getElementById('editModal').style.display = 'block';
+}
+
+function editSubject(index) {
+  currentEditType = 'subject';
+  currentEditIndex = index;
+  originalValue = subjects[index];
+  
+  document.getElementById('modalTitle').textContent = 'แก้ไขชื่อรายวิชา';
+  document.getElementById('editInput').value = originalValue;
+  document.getElementById('editModal').style.display = 'block';
+}
+
+function editRoom(index) {
+  currentEditType = 'room';
+  currentEditIndex = index;
+  originalValue = rooms[index];
+  
+  document.getElementById('modalTitle').textContent = 'แก้ไขชื่อห้อง';
+  document.getElementById('editInput').value = originalValue;
+  document.getElementById('editModal').style.display = 'block';
+}
+
+// ฟังก์ชันบันทึกการแก้ไขจาก Modal
+document.getElementById('saveEditBtn').onclick = function() {
+  const newValue = document.getElementById('editInput').value.trim();
+  
+  if (!newValue) {
+    alert('กรุณากรอกข้อมูล');
+    return;
+  }
+  
+  if (newValue === originalValue) {
+    document.getElementById('editModal').style.display = 'none';
+    return;
+  }
+  
+  // ตรวจสอบว่าชื่อซ้ำหรือไม่
+  let dataArray;
+  switch (currentEditType) {
+    case 'teacher':
+      dataArray = teachers;
+      break;
+    case 'class':
+      dataArray = classes;
+      break;
+    case 'subject':
+      dataArray = subjects;
+      break;
+    case 'room':
+      dataArray = rooms;
+      break;
+  }
+  
+  if (dataArray.includes(newValue) && newValue !== originalValue) {
+    alert('ชื่อนี้มีอยู่แล้วในระบบ');
+    return;
+  }
+  
+  // อัปเดทข้อมูล
+  dataArray[currentEditIndex] = newValue;
+  
+  // อัปเดทข้อมูลในตารางเรียน (ถ้ามี)
+  if (currentEditType === 'teacher') {
+    lessons.forEach(lesson => {
+      if (lesson.teacher === originalValue) {
+        lesson.teacher = newValue;
+      }
+    });
+  } else if (currentEditType === 'subject') {
+    lessons.forEach(lesson => {
+      if (lesson.subject === originalValue) {
+        lesson.subject = newValue;
+      }
+    });
+  } else if (currentEditType === 'class') {
+    lessons.forEach(lesson => {
+      if (lesson.classLevel === originalValue) {
+        lesson.classLevel = newValue;
+      }
+    });
+  } else if (currentEditType === 'room') {
+    lessons.forEach(lesson => {
+      if (lesson.room === originalValue) {
+        lesson.room = newValue;
+      }
+    });
+  }
+  
+  saveData();
+  loadDropdowns();
+  renderAll();
+  
+  document.getElementById('editModal').style.display = 'none';
+  document.getElementById('message').innerHTML = '<div style="color:green;">แก้ไขข้อมูลเรียบร้อยแล้ว</div>';
+};
+
+// ฟังก์ชันยกเลิกการแก้ไข
+document.getElementById('cancelEditBtn').onclick = function() {
+  document.getElementById('editModal').style.display = 'none';
+};
+
+// ปิด Modal เมื่อคลิก X
+document.querySelector('.close').onclick = function() {
+  document.getElementById('editModal').style.display = 'none';
+};
+
+// ปิด Modal เมื่อคลิกนอกพื้นที่
+window.onclick = function(event) {
+  const modal = document.getElementById('editModal');
+  if (event.target === modal) {
+    modal.style.display = 'none';
+  }
+};
 
 function uid(){return Date.now()+Math.random().toString(16).slice(2)}
 function renderAll(){renderGrid();renderList();renderSummary();}
