@@ -9,6 +9,7 @@
 <body>
   <div class="container">
     <header>
+      <!-- <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iOTAiIGhlaWdodD0iOTAiIHZpZXdCb3g9IjAgMCA5MCA5MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjkwIiBoZWlnaHQ9IjkwIiByeD0iOCIgZmlsbD0iIzEwYjk4MSIvPgo8dGV4dCB4PSI0NSIgeT0iNTAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkxUQzwvdGV4dD4KPC9zdmc+" alt="LTC Logo" />-->
       <img src="logoLTC.png" alt="LTC Logo" />
       <h2>ระบบจัดการตารางเรียนและตารางสอน</h2>
       <h1>วิทยาลัยเทคโนโลยีแหลมทอง</h1>
@@ -20,9 +21,9 @@
     </header>
 
     <div class="layout">
-      <!-- ตารางเรียน/ตารางสอน เต็มพื้นที่ด้านบน -->
+      <!-- ตารางเรียนของนักศึกษา/ตารางสอนของอาจารย์/ เต็มพื้นที่ด้านบน -->
       <div class="card">
-        <h3>ตารางเรียน / ตารางสอน</h3>
+        <h2>ตารางเรียนของนักศึกษา/ตารางสอนของอาจารย์/ ตารางห้องเรียน</h2>
         <div id="tabArea" class="tabs">
           <div class="tab active" data-type="all">ตารางรวม</div>
           <div class="tab" data-type="teacher">อาจารย์</div>
@@ -58,6 +59,14 @@
         <div>
           <div class="card" id="controls">
             <h2>เพิ่ม/แก้ไข รายการสอน</h2>
+            
+            <!-- เพิ่มปุ่มจัดการข้อมูล JSON -->
+            <div style="display:flex;gap:8px;margin-bottom:15px;flex-wrap:wrap;">
+              <button type="button" id="downloadJsonBtn" class="btn-primary">ดาวน์โหลด JSON</button>
+              <button type="button" id="importJsonBtn" class="btn-secondary">นำเข้า JSON</button>
+              <input type="file" id="jsonFileInput" accept=".json" style="display:none" />
+            </div>
+            
             <form id="lessonForm">
               <div class="row">
                 <div style="flex:1">
@@ -176,7 +185,7 @@
 
         <div>
           <div class="card">
-            <h3>รายการทั้งหมด</h3>
+            <h2>รายการจัดการเรียนทั้งหมด</h2>
             <table id="lessonTable">
               <thead>
                 <tr><th>วิชา</th><th>ครู</th><th>ชั้น</th><th>ห้อง</th><th>วัน</th><th>คาบ</th><th>จัดการ</th></tr>
