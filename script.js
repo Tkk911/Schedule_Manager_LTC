@@ -58,6 +58,18 @@ function loadDropdowns() {
   
   // โหลดข้อมูลลงลิสต์แสดงผล
   renderDataLists();
+  // โหลดข้อมูลลง dropdown สรุปอาจารย์
+  loadTeacherSummaryDropdown();
+}
+
+// ฟังก์ชันโหลด dropdown สำหรับเลือกอาจารย์ในสรุป
+function loadTeacherSummaryDropdown() {
+  const teacherSummarySelect = document.getElementById('teacherSummarySelect');
+  teacherSummarySelect.innerHTML = '<option value="all">แสดงทั้งหมด</option>';
+  
+  teachers.forEach(teacher => {
+    teacherSummarySelect.innerHTML += `<option value="${teacher}">${teacher}</option>`;
+  });
 }
 
 // ฟังก์ชันแสดงข้อมูลในลิสต์
@@ -452,13 +464,110 @@ function editLesson(lesson) {
   document.getElementById('message').innerHTML = '<div style="color:#f59e0b;">กำลังแก้ไขรายการสอน...</div>';
 }
 
+// ฟังก์ชันสร้างสรุปคาบสอนแบบละเอียด
 function renderSummary(){
-  const div=document.getElementById('teacherSummary'); div.innerHTML='';
-  const map={}; lessons.forEach(l=>map[l.teacher]=(map[l.teacher]||0)+1);
-  Object.entries(map).forEach(([t,c])=>{
-    div.innerHTML+=`<div class="box"><strong>${t}</strong><div class="small">คาบ/สัปดาห์: ${c}</div></div>`;
+  const div = document.getElementById('teacherSummary');
+  const selectedTeacher = document.getElementById('teacherSummarySelect').value;
+  
+  // สร้างโครงสร้างข้อมูลสำหรับสรุป
+  const teacherSummary = {};
+  
+  lessons.forEach(lesson => {
+    const { teacher, subject } = lesson;
+    
+    if (!teacherSummary[teacher]) {
+      teacherSummary[teacher] = {
+        total: 0,
+        subjects: {}
+      };
+    }
+    
+    teacherSummary[teacher].total++;
+    
+    if (!teacherSummary[teacher].subjects[subject]) {
+      teacherSummary[teacher].subjects[subject] = 0;
+    }
+    
+    teacherSummary[teacher].subjects[subject]++;
   });
-  if(!Object.keys(map).length) div.innerHTML='<div class="small">ยังไม่มีข้อมูล</div>';
+  
+  // เรียงลำดับอาจารย์ตามชื่อ
+  const sortedTeachers = Object.keys(teacherSummary).sort();
+  
+  div.innerHTML = '';
+  
+  if (Object.keys(teacherSummary).length === 0) {
+    div.innerHTML = '<div class="no-data">ยังไม่มีข้อมูลการสอน</div>';
+    return;
+  }
+  
+  const container = document.createElement('div');
+  container.className = 'teacher-summary-detail';
+  
+  let hasData = false;
+  
+  sortedTeachers.forEach(teacher => {
+    // กรองตามอาจารย์ที่เลือก (ถ้าไม่เลือก "แสดงทั้งหมด")
+    if (selectedTeacher !== 'all' && teacher !== selectedTeacher) {
+      return;
+    }
+    
+    hasData = true;
+    const teacherData = teacherSummary[teacher];
+    
+    const teacherItem = document.createElement('div');
+    teacherItem.className = 'teacher-summary-item';
+    
+    // Header - ชื่ออาจารย์และจำนวนคาบรวม
+    const header = document.createElement('div');
+    header.className = 'teacher-summary-header';
+    
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'teacher-summary-name';
+    nameDiv.textContent = teacher;
+    
+    const totalDiv = document.createElement('div');
+    totalDiv.className = 'teacher-summary-total';
+    totalDiv.textContent = `รวม ${teacherData.total} คาบ`;
+    
+    header.appendChild(nameDiv);
+    header.appendChild(totalDiv);
+    
+    // รายการวิชา
+    const subjectList = document.createElement('div');
+    subjectList.className = 'subject-list';
+    
+    // เรียงลำดับวิชาตามจำนวนคาบ (มากไปน้อย)
+    const sortedSubjects = Object.entries(teacherData.subjects)
+      .sort((a, b) => b[1] - a[1]);
+    
+    sortedSubjects.forEach(([subject, count]) => {
+      const subjectItem = document.createElement('div');
+      subjectItem.className = 'subject-item';
+      
+      const subjectName = document.createElement('div');
+      subjectName.className = 'subject-name';
+      subjectName.textContent = subject;
+      
+      const subjectPeriods = document.createElement('div');
+      subjectPeriods.className = 'subject-periods';
+      subjectPeriods.textContent = `${count} คาบ`;
+      
+      subjectItem.appendChild(subjectName);
+      subjectItem.appendChild(subjectPeriods);
+      subjectList.appendChild(subjectItem);
+    });
+    
+    teacherItem.appendChild(header);
+    teacherItem.appendChild(subjectList);
+    container.appendChild(teacherItem);
+  });
+  
+  if (!hasData && selectedTeacher !== 'all') {
+    div.innerHTML = '<div class="no-data">ไม่พบข้อมูลการสอนสำหรับอาจารย์ท่านนี้</div>';
+  } else {
+    div.appendChild(container);
+  }
 }
 
 function conflict(nl, excludeId = null){
@@ -686,6 +795,9 @@ function updateFilterOptions(){
   });
   sel.onchange=()=>{filterValue=sel.value;renderGrid();};
 }
+
+// Event listener สำหรับ dropdown สรุปอาจารย์
+document.getElementById('teacherSummarySelect').addEventListener('change', renderSummary);
 
 // โหลดข้อมูลเมื่อเริ่มต้น
 loadDropdowns();
