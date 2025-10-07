@@ -173,19 +173,95 @@
           </div>
 
           <div class="card">
-            <h3>สรุปคาบสอน (อาจารย์)</h3>
-            <div class="summary-controls" style="margin-bottom:10px;">
-              <select id="teacherSummarySelect" style="padding:6px; border-radius:6px; border:1px solid #ccc; width:100%;">
-                <option value="all">แสดงทั้งหมด</option>
-              </select>
+            <h3>สรุปคาบสอน (อาจารย์) & สรุปรายวิชาตามชั้นปี</h3>
+            
+            <!-- เพิ่มแท็บสำหรับเลือกประเภทสรุป -->
+            <div class="summary-tabs" style="display: flex; margin-bottom: 10px; border-bottom: 1px solid #d1fae5;">
+              <div class="summary-tab active" data-type="teacher">สรุปอาจารย์</div>
+              <div class="summary-tab" data-type="class">สรุปชั้นปี</div>
             </div>
-            <div id="teacherSummary" class="summary small"></div>
+            
+            <!-- ส่วนสรุปอาจารย์ (เดิม) -->
+            <div id="teacherSummarySection">
+              <div class="summary-controls" style="margin-bottom:10px;">
+                <select id="teacherSummarySelect" style="padding:6px; border-radius:6px; border:1px solid #ccc; width:100%;">
+                  <option value="all">แสดงทั้งหมด</option>
+                </select>
+              </div>
+              <div id="teacherSummary" class="summary small"></div>
+            </div>
+            
+            <!-- ส่วนสรุปชั้นปี (ใหม่) -->
+            <div id="classSummarySection" style="display: none;">
+              <div class="summary-controls" style="margin-bottom:10px;">
+                <select id="classSummarySelect" style="padding:6px; border-radius:6px; border:1px solid #ccc; width:100%;">
+                  <option value="all">แสดงทั้งหมด</option>
+                </select>
+              </div>
+              <div id="classSummary" class="summary small"></div>
+            </div>
           </div>
         </div>
 
         <div>
           <div class="card">
             <h2>รายการจัดการเรียนทั้งหมด</h2>
+            
+            <!-- เพิ่มส่วนกรองข้อมูล -->
+            <div class="filter-controls" style="margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
+              <div>
+                <label>กรองตามรายวิชา:</label>
+                <select id="filterSubject" style="padding: 6px; border-radius: 6px; border: 1px solid #ccc; width: 150px;">
+                  <option value="">ทั้งหมด</option>
+                </select>
+              </div>
+              <div>
+                <label>กรองตามครู:</label>
+                <select id="filterTeacher" style="padding: 6px; border-radius: 6px; border: 1px solid #ccc; width: 150px;">
+                  <option value="">ทั้งหมด</option>
+                </select>
+              </div>
+              <div>
+                <label>กรองตามชั้น:</label>
+                <select id="filterClass" style="padding: 6px; border-radius: 6px; border: 1px solid #ccc; width: 150px;">
+                  <option value="">ทั้งหมด</option>
+                </select>
+              </div>
+              <div>
+                <label>กรองตามห้อง:</label>
+                <select id="filterRoom" style="padding: 6px; border-radius: 6px; border: 1px solid #ccc; width: 150px;">
+                  <option value="">ทั้งหมด</option>
+                </select>
+              </div>
+              <div>
+                <label>กรองตามวัน:</label>
+                <select id="filterDay" style="padding: 6px; border-radius: 6px; border: 1px solid #ccc; width: 120px;">
+                  <option value="">ทั้งหมด</option>
+                  <option value="0">จันทร์</option>
+                  <option value="1">อังคาร</option>
+                  <option value="2">พุธ</option>
+                  <option value="3">พฤหัสบดี</option>
+                  <option value="4">ศุกร์</option>
+                </select>
+              </div>
+              <div>
+                <label>กรองตามคาบ:</label>
+                <select id="filterPeriod" style="padding: 6px; border-radius: 6px; border: 1px solid #ccc; width: 120px;">
+                  <option value="">ทั้งหมด</option>
+                  <option value="0">คาบ 1</option>
+                  <option value="1">คาบ 2</option>
+                  <option value="2">คาบ 3</option>
+                  <option value="3">คาบ 4</option>
+                  <option value="5">คาบ 5</option>
+                  <option value="6">คาบ 6</option>
+                  <option value="7">คาบ 7</option>
+                </select>
+              </div>
+              <div style="align-self: end;">
+                <button type="button" id="resetFilterBtn" class="btn-secondary" style="padding: 6px 12px;">รีเซ็ตการกรอง</button>
+              </div>
+            </div>
+            
             <table id="lessonTable">
               <thead>
                 <tr><th>วิชา</th><th>ครู</th><th>ชั้น</th><th>ห้อง</th><th>วัน</th><th>คาบ</th><th>จัดการ</th></tr>
