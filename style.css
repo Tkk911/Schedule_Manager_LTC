@@ -224,6 +224,85 @@ th{background:#d1fae5}
   margin-bottom: 10px;
 }
 
+/* สไตล์สำหรับส่วนกรองข้อมูล */
+.filter-controls {
+  background: #f0fdf4;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #d1fae5;
+}
+
+.filter-controls label {
+  font-size: 12px;
+  font-weight: bold;
+  margin-bottom: 4px;
+  display: block;
+}
+
+/* สไตล์สำหรับแท็บสรุป */
+.summary-tabs {
+  display: flex;
+  margin-bottom: 10px;
+  border-bottom: 1px solid #d1fae5;
+}
+
+.summary-tab {
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+}
+
+.summary-tab.active {
+  color: var(--green-main);
+  border-bottom: 2px solid var(--green-main);
+}
+
+.summary-tab:hover {
+  color: var(--green-dark);
+}
+
+/* สไตล์สำหรับสรุปชั้นปี */
+.class-summary-detail {
+  width: 100%;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.class-summary-item {
+  background: var(--green-light);
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  border-left: 4px solid var(--green-main);
+}
+
+.class-summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.class-summary-name {
+  font-weight: bold;
+  color: var(--green-dark);
+  font-size: 14px;
+}
+
+.class-summary-total {
+  background: var(--green-main);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
 @media print {
   #controls, #message, #tabArea, #filterBox {display:none}
   body{background:white;color:black}
@@ -232,4 +311,6 @@ th{background:#d1fae5}
   header input{border:0;background:none}
   .modal {display:none !important;}
   .summary-controls {display:none !important;}
+  .filter-controls {display:none !important;}
+  .summary-tabs {display:none !important;}
 }
