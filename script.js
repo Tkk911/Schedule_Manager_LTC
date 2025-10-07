@@ -17,6 +17,16 @@ let currentEditType = null;
 let currentEditIndex = null;
 let originalValue = null;
 
+// เพิ่มตัวแปรสำหรับเก็บค่ากรอง
+let currentFilters = {
+  subject: '',
+  teacher: '',
+  classLevel: '',
+  room: '',
+  day: '',
+  period: ''
+};
+
 // ฟังก์ชันบันทึกข้อมูลลง Local Storage
 function saveData() {
   localStorage.setItem('teachers', JSON.stringify(teachers));
@@ -146,6 +156,9 @@ function loadDropdowns() {
   renderDataLists();
   // โหลดข้อมูลลง dropdown สรุปอาจารย์
   loadTeacherSummaryDropdown();
+  
+  // โหลดตัวเลือกใน dropdown กรอง
+  loadFilterOptions();
 }
 
 // ฟังก์ชันโหลด dropdown สำหรับเลือกอาจารย์ในสรุป
@@ -155,6 +168,44 @@ function loadTeacherSummaryDropdown() {
   
   teachers.forEach(teacher => {
     teacherSummarySelect.innerHTML += `<option value="${teacher}">${teacher}</option>`;
+  });
+}
+
+// ฟังก์ชันโหลดตัวเลือกใน dropdown กรอง
+function loadFilterOptions() {
+  // กรองตามรายวิชา
+  const filterSubject = document.getElementById('filterSubject');
+  filterSubject.innerHTML = '<option value="">ทั้งหมด</option>';
+  subjects.forEach(subject => {
+    filterSubject.innerHTML += `<option value="${subject}">${subject}</option>`;
+  });
+  
+  // กรองตามครู
+  const filterTeacher = document.getElementById('filterTeacher');
+  filterTeacher.innerHTML = '<option value="">ทั้งหมด</option>';
+  teachers.forEach(teacher => {
+    filterTeacher.innerHTML += `<option value="${teacher}">${teacher}</option>`;
+  });
+  
+  // กรองตามชั้น
+  const filterClass = document.getElementById('filterClass');
+  filterClass.innerHTML = '<option value="">ทั้งหมด</option>';
+  classes.forEach(cls => {
+    filterClass.innerHTML += `<option value="${cls}">${cls}</option>`;
+  });
+  
+  // กรองตามห้อง
+  const filterRoom = document.getElementById('filterRoom');
+  filterRoom.innerHTML = '<option value="">ทั้งหมด</option>';
+  rooms.forEach(room => {
+    filterRoom.innerHTML += `<option value="${room}">${room}</option>`;
+  });
+  
+  // โหลดตัวเลือกใน dropdown สรุปชั้นปี
+  const classSummarySelect = document.getElementById('classSummarySelect');
+  classSummarySelect.innerHTML = '<option value="all">แสดงทั้งหมด</option>';
+  classes.forEach(cls => {
+    classSummarySelect.innerHTML += `<option value="${cls}">${cls}</option>`;
   });
 }
 
@@ -473,7 +524,13 @@ window.onclick = function(event) {
 };
 
 function uid(){return Date.now()+Math.random().toString(16).slice(2)}
-function renderAll(){renderGrid();renderList();renderSummary();}
+
+function renderAll(){
+  renderGrid();
+  renderList();
+  renderSummary();
+  renderClassSummary(); // เพิ่มการเรียกฟังก์ชันสรุปชั้นปี
+}
 
 function renderGrid(){
   const body=document.getElementById('gridBody'); 
@@ -503,10 +560,45 @@ function renderGrid(){
 }
 
 function renderList(){
-  const tb=document.querySelector('#lessonTable tbody'); tb.innerHTML='';
-  lessons.forEach(l=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${l.subject}</td><td>${l.teacher}</td><td>${l.classLevel}</td><td>${l.room}</td><td>${days[l.day]}</td><td>${periods[l.period]}</td>
+  const tb = document.querySelector('#lessonTable tbody'); 
+  tb.innerHTML = '';
+  
+  // กรองข้อมูลตามเงื่อนไข
+  let filteredLessons = lessons.filter(lesson => {
+    if (currentFilters.subject && lesson.subject !== currentFilters.subject) return false;
+    if (currentFilters.teacher && lesson.teacher !== currentFilters.teacher) return false;
+    if (currentFilters.classLevel && lesson.classLevel !== currentFilters.classLevel) return false;
+    if (currentFilters.room && lesson.room !== currentFilters.room) return false;
+    if (currentFilters.day !== '' && lesson.day !== parseInt(currentFilters.day)) return false;
+    if (currentFilters.period !== '' && lesson.period !== parseInt(currentFilters.period)) return false;
+    return true;
+  });
+  
+  // แสดงจำนวนรายการที่กรองได้
+  const tableHeader = document.querySelector('#lessonTable').closest('.card').querySelector('h2');
+  const originalTitle = 'รายการจัดการเรียนทั้งหมด';
+  if (Object.values(currentFilters).some(filter => filter !== '')) {
+    tableHeader.textContent = `${originalTitle} (${filteredLessons.length} รายการ)`;
+  } else {
+    tableHeader.textContent = originalTitle;
+  }
+  
+  // เรียงลำดับตามวันและคาบ
+  filteredLessons.sort((a, b) => {
+    if (a.day !== b.day) return a.day - b.day;
+    return a.period - b.period;
+  });
+  
+  // แสดงผล
+  filteredLessons.forEach(l => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${l.subject}</td>
+      <td>${l.teacher}</td>
+      <td>${l.classLevel}</td>
+      <td>${l.room}</td>
+      <td>${days[l.day]}</td>
+      <td>${periods[l.period]}</td>
       <td>
         <button class="btn-warning small edit-btn" data-id="${l.id}" style="margin-right:4px;">แก้ไข</button>
         <button class="btn-danger small" data-id="${l.id}">ลบ</button>
@@ -515,16 +607,17 @@ function renderList(){
   });
   
   // เพิ่ม event สำหรับปุ่มแก้ไข
-  tb.querySelectorAll('.edit-btn').forEach(b=>b.onclick=()=>{
-    const lesson = lessons.find(x=>x.id===b.dataset.id);
+  tb.querySelectorAll('.edit-btn').forEach(b => b.onclick = () => {
+    const lesson = lessons.find(x => x.id === b.dataset.id);
     if(lesson) {
       editLesson(lesson);
     }
   });
   
   // ปุ่มลบ
-  tb.querySelectorAll('.btn-danger').forEach(b=>b.onclick=()=>{
-    lessons=lessons.filter(x=>x.id!==b.dataset.id);
+  tb.querySelectorAll('.btn-danger').forEach(b => b.onclick = () => {
+    lessons = lessons.filter(x => x.id !== b.dataset.id);
+    saveData();
     renderAll();
     updateFilterOptions();
   });
@@ -651,6 +744,112 @@ function renderSummary(){
   
   if (!hasData && selectedTeacher !== 'all') {
     div.innerHTML = '<div class="no-data">ไม่พบข้อมูลการสอนสำหรับอาจารย์ท่านนี้</div>';
+  } else {
+    div.appendChild(container);
+  }
+}
+
+// ฟังก์ชันสร้างสรุปชั้นปี
+function renderClassSummary() {
+  const div = document.getElementById('classSummary');
+  const selectedClass = document.getElementById('classSummarySelect').value;
+  
+  // สร้างโครงสร้างข้อมูลสำหรับสรุปชั้นปี
+  const classSummary = {};
+  
+  lessons.forEach(lesson => {
+    const { classLevel, subject } = lesson;
+    
+    if (!classSummary[classLevel]) {
+      classSummary[classLevel] = {
+        total: 0,
+        subjects: {}
+      };
+    }
+    
+    classSummary[classLevel].total++;
+    
+    if (!classSummary[classLevel].subjects[subject]) {
+      classSummary[classLevel].subjects[subject] = 0;
+    }
+    
+    classSummary[classLevel].subjects[subject]++;
+  });
+  
+  // เรียงลำดับชั้นปี
+  const sortedClasses = Object.keys(classSummary).sort();
+  
+  div.innerHTML = '';
+  
+  if (Object.keys(classSummary).length === 0) {
+    div.innerHTML = '<div class="no-data">ยังไม่มีข้อมูลการสอน</div>';
+    return;
+  }
+  
+  const container = document.createElement('div');
+  container.className = 'class-summary-detail';
+  
+  let hasData = false;
+  
+  sortedClasses.forEach(classLevel => {
+    // กรองตามชั้นปีที่เลือก (ถ้าไม่เลือก "แสดงทั้งหมด")
+    if (selectedClass !== 'all' && classLevel !== selectedClass) {
+      return;
+    }
+    
+    hasData = true;
+    const classData = classSummary[classLevel];
+    
+    const classItem = document.createElement('div');
+    classItem.className = 'class-summary-item';
+    
+    // Header - ชื่อชั้นปีและจำนวนคาบรวม
+    const header = document.createElement('div');
+    header.className = 'class-summary-header';
+    
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'class-summary-name';
+    nameDiv.textContent = classLevel;
+    
+    const totalDiv = document.createElement('div');
+    totalDiv.className = 'class-summary-total';
+    totalDiv.textContent = `รวม ${classData.total} คาบ`;
+    
+    header.appendChild(nameDiv);
+    header.appendChild(totalDiv);
+    
+    // รายการวิชา
+    const subjectList = document.createElement('div');
+    subjectList.className = 'subject-list';
+    
+    // เรียงลำดับวิชาตามจำนวนคาบ (มากไปน้อย)
+    const sortedSubjects = Object.entries(classData.subjects)
+      .sort((a, b) => b[1] - a[1]);
+    
+    sortedSubjects.forEach(([subject, count]) => {
+      const subjectItem = document.createElement('div');
+      subjectItem.className = 'subject-item';
+      
+      const subjectName = document.createElement('div');
+      subjectName.className = 'subject-name';
+      subjectName.textContent = subject;
+      
+      const subjectPeriods = document.createElement('div');
+      subjectPeriods.className = 'subject-periods';
+      subjectPeriods.textContent = `${count} คาบ`;
+      
+      subjectItem.appendChild(subjectName);
+      subjectItem.appendChild(subjectPeriods);
+      subjectList.appendChild(subjectItem);
+    });
+    
+    classItem.appendChild(header);
+    classItem.appendChild(subjectList);
+    container.appendChild(classItem);
+  });
+  
+  if (!hasData && selectedClass !== 'all') {
+    div.innerHTML = '<div class="no-data">ไม่พบข้อมูลการสอนสำหรับชั้นปีนี้</div>';
   } else {
     div.appendChild(container);
   }
@@ -882,8 +1081,105 @@ function updateFilterOptions(){
   sel.onchange=()=>{filterValue=sel.value;renderGrid();};
 }
 
+// ฟังก์ชันจัดการการกรอง
+function setupFilters() {
+  // ตั้งค่า event listeners สำหรับ dropdown กรองทั้งหมด
+  document.getElementById('filterSubject').addEventListener('change', function() {
+    currentFilters.subject = this.value;
+    renderList();
+  });
+  
+  document.getElementById('filterTeacher').addEventListener('change', function() {
+    currentFilters.teacher = this.value;
+    renderList();
+  });
+  
+  document.getElementById('filterClass').addEventListener('change', function() {
+    currentFilters.classLevel = this.value;
+    renderList();
+  });
+  
+  document.getElementById('filterRoom').addEventListener('change', function() {
+    currentFilters.room = this.value;
+    renderList();
+  });
+  
+  document.getElementById('filterDay').addEventListener('change', function() {
+    currentFilters.day = this.value;
+    renderList();
+  });
+  
+  document.getElementById('filterPeriod').addEventListener('change', function() {
+    currentFilters.period = this.value;
+    renderList();
+  });
+  
+  // ปุ่มรีเซ็ตการกรอง
+  document.getElementById('resetFilterBtn').addEventListener('click', function() {
+    // รีเซ็ตค่ากรองทั้งหมด
+    currentFilters = {
+      subject: '',
+      teacher: '',
+      classLevel: '',
+      room: '',
+      day: '',
+      period: ''
+    };
+    
+    // รีเซ็ต dropdown ทั้งหมด
+    document.getElementById('filterSubject').value = '';
+    document.getElementById('filterTeacher').value = '';
+    document.getElementById('filterClass').value = '';
+    document.getElementById('filterRoom').value = '';
+    document.getElementById('filterDay').value = '';
+    document.getElementById('filterPeriod').value = '';
+    
+    // รีเซ็ตตาราง
+    renderList();
+  });
+}
+
+// ฟังก์ชันจัดการแท็บสรุป
+function setupSummaryTabs() {
+  const teacherTab = document.querySelector('.summary-tab[data-type="teacher"]');
+  const classTab = document.querySelector('.summary-tab[data-type="class"]');
+  
+  teacherTab.addEventListener('click', function() {
+    // เปิดแท็บสรุปอาจารย์
+    document.querySelectorAll('.summary-tab').forEach(tab => tab.classList.remove('active'));
+    teacherTab.classList.add('active');
+    
+    document.getElementById('teacherSummarySection').style.display = 'block';
+    document.getElementById('classSummarySection').style.display = 'none';
+  });
+  
+  classTab.addEventListener('click', function() {
+    // เปิดแท็บสรุปชั้นปี
+    document.querySelectorAll('.summary-tab').forEach(tab => tab.classList.remove('active'));
+    classTab.classList.add('active');
+    
+    document.getElementById('teacherSummarySection').style.display = 'none';
+    document.getElementById('classSummarySection').style.display = 'block';
+    
+    // รีเฟรชข้อมูลสรุปชั้นปี
+    renderClassSummary();
+  });
+}
+
 // Event listener สำหรับ dropdown สรุปอาจารย์
 document.getElementById('teacherSummarySelect').addEventListener('change', renderSummary);
+
+// Event listener สำหรับ dropdown สรุปชั้นปี
+document.getElementById('classSummarySelect').addEventListener('change', renderClassSummary);
+
+// เมื่อโหลดหน้าเว็บเสร็จ
+window.addEventListener('DOMContentLoaded', function() {
+  // ตั้งค่าการกรอง
+  setupFilters();
+  
+  // ตั้งค่าแท็บสรุป
+  setupSummaryTabs();
+});
 
 // โหลดข้อมูลเมื่อเริ่มต้น
 loadDropdowns();
