@@ -288,6 +288,10 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="script.js"></script>
+  <script src="script.js">
+    document.addEventListener('contextmenu', function(e) {
+    e.preventDefault();
+});
+  </script>
 </body>
 </html>
