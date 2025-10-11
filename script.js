@@ -27,6 +27,116 @@ let currentFilters = {
   period: ''
 };
 
+// เพิ่มตัวแปรสำหรับจัดการโหมด
+let isAdminMode = false;
+const ADMIN_PASSWORD = "admin452026"; // รหัสผ่านสำหรับโหมด Admin
+
+// ฟังก์ชันแสดง/ซ่อนส่วนล็อกอิน
+function showLoginModal() {
+  document.getElementById('loginModal').style.display = 'block';
+  document.getElementById('mainApp').style.display = 'none';
+}
+
+function hideLoginModal() {
+  document.getElementById('loginModal').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'block';
+}
+
+// ฟังก์ชันตั้งค่าโหมดการใช้งาน
+function setUserMode(isAdmin) {
+  isAdminMode = isAdmin;
+  
+  // อัปเดทสถานะผู้ใช้
+  const userStatus = document.getElementById('userStatus');
+  const logoutBtn = document.getElementById('logoutBtn');
+  
+  if (isAdmin) {
+    userStatus.textContent = "โหมด: ผู้ดูแลระบบ";
+    userStatus.style.color = "#10b981";
+    logoutBtn.style.display = 'inline-block';
+  } else {
+    userStatus.textContent = "โหมด: ผู้เยี่ยมชม";
+    userStatus.style.color = "#4b5563";
+    logoutBtn.style.display = 'inline-block';
+  }
+  
+  // ซ่อนหรือแสดงฟังก์ชันการแก้ไขตามโหมด
+  toggleEditFunctions(isAdmin);
+}
+
+// ฟังก์ชันซ่อน/แสดงฟังก์ชันการแก้ไข
+function toggleEditFunctions(show) {
+  // ซ่อนหรือแสดงฟอร์มเพิ่ม/แก้ไข
+  const controls = document.getElementById('controls');
+  controls.style.display = show ? 'block' : 'none';
+  
+  // ซ่อนหรือแสดงปุ่มจัดการข้อมูลในส่วนสรุป
+  const editButtons = document.querySelectorAll('.btn-warning, .btn-danger, .btn-info');
+  editButtons.forEach(button => {
+    button.style.display = show ? 'inline-block' : 'none';
+  });
+  
+  // ซ่อนหรือแสดงปุ่มจัดการในตารางรายการ
+  const tableActionButtons = document.querySelectorAll('#lessonTable .btn-warning, #lessonTable .btn-danger');
+  tableActionButtons.forEach(button => {
+    button.style.display = show ? 'inline-block' : 'none';
+  });
+  
+  // ซ่อนหรือแสดงส่วนจัดการข้อมูล (เพิ่มครู, ชั้นเรียน, รายวิชา, ห้อง)
+  const dataManagementSections = document.querySelectorAll('.data-management');
+  dataManagementSections.forEach(section => {
+    section.style.display = show ? 'block' : 'none';
+  });
+  
+  // ซ่อนหรือแสดงปุ่มจัดการ JSON
+  const jsonButtons = document.querySelectorAll('#downloadJsonBtn, #importJsonBtn');
+  jsonButtons.forEach(button => {
+    button.style.display = show ? 'inline-block' : 'none';
+  });
+  
+  // ซ่อนหรือแสดงปุ่มเพิ่มอัตโนมัติ
+  document.getElementById('autoBtn').style.display = show ? 'inline-block' : 'none';
+  
+  // ซ่อนหรือแสดงปุ่มรีเซ็ตฟอร์ม
+  document.getElementById('resetBtn').style.display = show ? 'inline-block' : 'none';
+}
+
+// ฟังก์ชันล็อกอิน
+function loginAsAdmin() {
+  const password = document.getElementById('adminPassword').value;
+  const messageDiv = document.getElementById('loginMessage');
+  
+  if (password === ADMIN_PASSWORD) {
+    hideLoginModal();
+    setUserMode(true);
+    messageDiv.innerHTML = '';
+  } else {
+    messageDiv.innerHTML = '<div style="color:red;">รหัสผ่านไม่ถูกต้อง</div>';
+  }
+}
+
+// ฟังก์ชันเข้าสู่ระบบเป็นผู้เยี่ยมชม
+function loginAsGuest() {
+  hideLoginModal();
+  setUserMode(false);
+}
+
+// ฟังก์ชันออกจากระบบ
+function logout() {
+  showLoginModal();
+  document.getElementById('adminPassword').value = '';
+  document.getElementById('loginMessage').innerHTML = '';
+}
+
+// ป้องกันการดำเนินการในโหมด Guest
+function preventGuestAction(actionName) {
+  if (!isAdminMode) {
+    alert(`คุณอยู่ในโหมดผู้เยี่ยมชม ไม่สามารถ${actionName}ได้`);
+    return true;
+  }
+  return false;
+}
+
 // ฟังก์ชันบันทึกข้อมูลลง Local Storage
 function saveData() {
   localStorage.setItem('teachers', JSON.stringify(teachers));
@@ -110,6 +220,7 @@ function importJSON(file) {
 document.getElementById('downloadJsonBtn').onclick = downloadJSON;
 
 document.getElementById('importJsonBtn').onclick = function() {
+  if (preventGuestAction("นำเข้าข้อมูลจากไฟล์ JSON")) return;
   document.getElementById('jsonFileInput').click();
 };
 
@@ -274,6 +385,8 @@ function renderDataLists() {
 
 // ฟังก์ชันเพิ่มข้อมูล
 document.getElementById('addTeacher').onclick = () => {
+  if (preventGuestAction("เพิ่มอาจารย์")) return;
+  
   const newTeacher = document.getElementById('newTeacher').value.trim();
   if (newTeacher && !teachers.includes(newTeacher)) {
     teachers.push(newTeacher);
@@ -285,6 +398,8 @@ document.getElementById('addTeacher').onclick = () => {
 };
 
 document.getElementById('addClass').onclick = () => {
+  if (preventGuestAction("เพิ่มชั้นเรียน")) return;
+  
   const newClass = document.getElementById('newClass').value.trim();
   if (newClass && !classes.includes(newClass)) {
     classes.push(newClass);
@@ -296,6 +411,8 @@ document.getElementById('addClass').onclick = () => {
 };
 
 document.getElementById('addSubject').onclick = () => {
+  if (preventGuestAction("เพิ่มรายวิชา")) return;
+  
   const newSubject = document.getElementById('newSubject').value.trim();
   if (newSubject && !subjects.includes(newSubject)) {
     subjects.push(newSubject);
@@ -307,6 +424,8 @@ document.getElementById('addSubject').onclick = () => {
 };
 
 document.getElementById('addRoom').onclick = () => {
+  if (preventGuestAction("เพิ่มห้อง")) return;
+  
   const newRoom = document.getElementById('newRoom').value.trim();
   if (newRoom && !rooms.includes(newRoom)) {
     rooms.push(newRoom);
@@ -319,6 +438,8 @@ document.getElementById('addRoom').onclick = () => {
 
 // ฟังก์ชันลบข้อมูล
 function removeTeacher(index) {
+  if (preventGuestAction("ลบอาจารย์")) return;
+  
   const teacherName = teachers[index];
   
   // ตรวจสอบว่ามีการใช้อาจารย์นี้ในตารางเรียนหรือไม่
@@ -337,6 +458,8 @@ function removeTeacher(index) {
 }
 
 function removeClass(index) {
+  if (preventGuestAction("ลบชั้นเรียน")) return;
+  
   const className = classes[index];
   
   // ตรวจสอบว่ามีการใช้ชั้นเรียนนี้ในตารางเรียนหรือไม่
@@ -355,6 +478,8 @@ function removeClass(index) {
 }
 
 function removeSubject(index) {
+  if (preventGuestAction("ลบรายวิชา")) return;
+  
   const subjectName = subjects[index];
   
   // ตรวจสอบว่ามีการใช้รายวิชานี้ในตารางเรียนหรือไม่
@@ -373,6 +498,8 @@ function removeSubject(index) {
 }
 
 function removeRoom(index) {
+  if (preventGuestAction("ลบห้อง")) return;
+  
   const roomName = rooms[index];
   
   // ตรวจสอบว่ามีการใช้ห้องนี้ในตารางเรียนหรือไม่
@@ -392,6 +519,8 @@ function removeRoom(index) {
 
 // ฟังก์ชันแก้ไขข้อมูล
 function editTeacher(index) {
+  if (preventGuestAction("แก้ไขข้อมูลอาจารย์")) return;
+  
   currentEditType = 'teacher';
   currentEditIndex = index;
   originalValue = teachers[index];
@@ -402,6 +531,8 @@ function editTeacher(index) {
 }
 
 function editClass(index) {
+  if (preventGuestAction("แก้ไขข้อมูลชั้นเรียน")) return;
+  
   currentEditType = 'class';
   currentEditIndex = index;
   originalValue = classes[index];
@@ -412,6 +543,8 @@ function editClass(index) {
 }
 
 function editSubject(index) {
+  if (preventGuestAction("แก้ไขข้อมูลรายวิชา")) return;
+  
   currentEditType = 'subject';
   currentEditIndex = index;
   originalValue = subjects[index];
@@ -422,6 +555,8 @@ function editSubject(index) {
 }
 
 function editRoom(index) {
+  if (preventGuestAction("แก้ไขข้อมูลห้อง")) return;
+  
   currentEditType = 'room';
   currentEditIndex = index;
   originalValue = rooms[index];
@@ -433,6 +568,8 @@ function editRoom(index) {
 
 // ฟังก์ชันบันทึกการแก้ไขจาก Modal
 document.getElementById('saveEditBtn').onclick = function() {
+  if (preventGuestAction("บันทึกการแก้ไข")) return;
+  
   const newValue = document.getElementById('editInput').value.trim();
   
   if (!newValue) {
@@ -608,6 +745,7 @@ function renderList(){
   
   // เพิ่ม event สำหรับปุ่มแก้ไข
   tb.querySelectorAll('.edit-btn').forEach(b => b.onclick = () => {
+    if (preventGuestAction("แก้ไขรายการสอน")) return;
     const lesson = lessons.find(x => x.id === b.dataset.id);
     if(lesson) {
       editLesson(lesson);
@@ -616,6 +754,7 @@ function renderList(){
   
   // ปุ่มลบ
   tb.querySelectorAll('.btn-danger').forEach(b => b.onclick = () => {
+    if (preventGuestAction("ลบรายการสอน")) return;
     lessons = lessons.filter(x => x.id !== b.dataset.id);
     saveData();
     renderAll();
@@ -926,6 +1065,8 @@ function autoSchedule(nl, numPeriods){
 
 // ✅ ฟังก์ชันบันทึก/อัปเดท
 lessonForm.onsubmit=e=>{
+  if (preventGuestAction("บันทึกหรือแก้ไขข้อมูลการสอน")) return;
+  
   e.preventDefault();
   const numPeriods = parseInt(document.getElementById('numPeriods').value) || 1;
   
@@ -968,6 +1109,8 @@ lessonForm.onsubmit=e=>{
 };
 
 autoBtn.onclick=()=>{
+  if (preventGuestAction("เพิ่มข้อมูลการสอนอัตโนมัติ")) return;
+  
   const numPeriods = parseInt(document.getElementById('numPeriods').value) || 1;
   const nl={
     id:uid(),
@@ -996,6 +1139,8 @@ autoBtn.onclick=()=>{
 };
 
 resetBtn.onclick=()=>{
+  if (preventGuestAction("รีเซ็ตฟอร์ม")) return;
+  
   lessonForm.reset();
   // รีเซ็ตโหมดแก้ไข
   editingId = null;
@@ -1174,13 +1319,28 @@ document.getElementById('classSummarySelect').addEventListener('change', renderC
 
 // เมื่อโหลดหน้าเว็บเสร็จ
 window.addEventListener('DOMContentLoaded', function() {
+  // แสดงหน้าล็อกอินเมื่อโหลดหน้าเว็บ
+  showLoginModal();
+  
+  // ตั้งค่า Event Listeners สำหรับระบบล็อกอิน
+  document.getElementById('loginBtn').onclick = loginAsAdmin;
+  document.getElementById('guestBtn').onclick = loginAsGuest;
+  document.getElementById('logoutBtn').onclick = logout;
+  
+  // อนุญาตให้กด Enter ในช่องรหัสผ่าน
+  document.getElementById('adminPassword').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+      loginAsAdmin();
+    }
+  });
+  
   // ตั้งค่าการกรอง
   setupFilters();
   
   // ตั้งค่าแท็บสรุป
   setupSummaryTabs();
+  
+  // โหลดข้อมูลเมื่อเริ่มต้น
+  loadDropdowns();
+  renderAll();
 });
-
-// โหลดข้อมูลเมื่อเริ่มต้น
-loadDropdowns();
-renderAll();
