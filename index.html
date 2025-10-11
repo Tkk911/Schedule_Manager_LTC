@@ -25,7 +25,7 @@
 
   <div class="container" id="mainApp" style="display: none;">
     <header>
-      <img src="logoLTC.png" alt="LTC Logo" />
+      <img src="https://tkk911.github.io/Schedule_Manager_LTC/logoLTC.png" alt="LTC Logo" />
       <h2>ระบบจัดการตารางเรียนและตารางสอน</h2>
       <h1>วิทยาลัยเทคโนโลยีแหลมทอง</h1>
       <div class="sub">กลุ่มงาน ไฟฟ้าและอิเล็กทรอนิกส์</div>
@@ -79,10 +79,12 @@
           <div class="card" id="controls">
             <h2>เพิ่ม/แก้ไข รายการสอน</h2>
             
-            <!-- เพิ่มปุ่มจัดการข้อมูล JSON -->
+            <!-- เพิ่มปุ่มจัดการข้อมูล JSON และ Google Sheets -->
             <div style="display:flex;gap:8px;margin-bottom:15px;flex-wrap:wrap;">
               <button type="button" id="downloadJsonBtn" class="btn-primary">ดาวน์โหลด JSON</button>
               <button type="button" id="importJsonBtn" class="btn-secondary">นำเข้า JSON</button>
+              <button type="button" id="exportToSheetsBtn" class="btn-primary">ส่งข้อมูลไป Google Sheets</button>
+              <button type="button" id="importFromSheetsBtn" class="btn-secondary">โหลดข้อมูลจาก Google Sheets</button>
               <input type="file" id="jsonFileInput" accept=".json" style="display:none" />
             </div>
             
