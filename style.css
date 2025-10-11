@@ -303,6 +303,36 @@ th{background:#d1fae5}
   font-weight: bold;
 }
 
+/* สไตล์สำหรับระบบล็อกอิน */
+#loginModal .modal-content {
+  background: white;
+  margin: 15% auto;
+  padding: 30px;
+  border-radius: 12px;
+  width: 400px;
+  max-width: 90%;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  border-top: 4px solid var(--green-main);
+}
+
+#userInfo {
+  margin-top: 10px;
+  font-size: 14px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+}
+
+#userStatus {
+  font-weight: bold;
+}
+
+/* ปรับปรุงการแสดงผลสำหรับโหมด Guest */
+.data-management[style*="display: none"] {
+  display: none !important;
+}
+
 @media print {
   #controls, #message, #tabArea, #filterBox {display:none}
   body{background:white;color:black}
@@ -313,4 +343,6 @@ th{background:#d1fae5}
   .summary-controls {display:none !important;}
   .filter-controls {display:none !important;}
   .summary-tabs {display:none !important;}
+  #loginModal {display:none !important;}
+  #userInfo {display:none !important;}
 }
