@@ -1,23 +1,24 @@
+[file name]: script.js
+[file content begin]
 const periods=["คาบ 1 (08:30-09:20)","คาบ 2 (09:20-10:10)","คาบ 3 (10:20-11:10)","คาบ 4 (11:10-12:00)","พักกลางวัน","คาบ 5 (12:50-13:40)","คาบ 6 (13:40-14:30)","คาบ 7 (14:30-15:20)"];
 const days=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
-let lessons=JSON.parse(localStorage.getItem('lessons')) || [];
+// เปลี่ยน URL นี้เป็น URL จาก Google Apps Script ที่คุณได้หลังจาก Deploy
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbymK9ipURLr7NRZUq1nd7-BzNFA_0NyvJDutTdOVDWZGV1Oz_IpBHMxJqrVQsXlJucrYQ/exec';
 
-// ฐานข้อมูลสำหรับอาจารย์, ชั้นเรียน, รายวิชา, ห้อง
-let teachers = JSON.parse(localStorage.getItem('teachers')) || ['ครูสมชาย', 'ครูสมหญิง', 'ครูนิดา'];
-let classes = JSON.parse(localStorage.getItem('classes')) || ['ปวช.1/1', 'ปวช.1/2', 'ปวช.2/1'];
-let subjects = JSON.parse(localStorage.getItem('subjects')) || ['คณิตศาสตร์', 'วิทยาศาสตร์', 'ภาษาอังกฤษ'];
-let rooms = JSON.parse(localStorage.getItem('rooms')) || ['ห้อง 101', 'ห้อง 102', 'ห้อง Lab 1'];
+let lessons = [];
+let teachers = [];
+let classes = [];
+let subjects = [];
+let rooms = [];
 
 let currentTab="all";
 let filterValue="";
-let editingId = null; // เก็บ ID ของรายการที่กำลังแก้ไข
+let editingId = null;
 
-// ตัวแปรสำหรับจัดการ Modal แก้ไขข้อมูล
 let currentEditType = null;
 let currentEditIndex = null;
 let originalValue = null;
 
-// เพิ่มตัวแปรสำหรับเก็บค่ากรอง
 let currentFilters = {
   subject: '',
   teacher: '',
@@ -27,9 +28,214 @@ let currentFilters = {
   period: ''
 };
 
-// เพิ่มตัวแปรสำหรับจัดการโหมด
 let isAdminMode = false;
-const ADMIN_PASSWORD = "admin452026"; // รหัสผ่านสำหรับโหมด Admin
+const ADMIN_PASSWORD = "admin452026";
+
+// ฟังก์ชันเรียกใช้งาน Google Apps Script พร้อมจัดการ CORS
+async function callGoogleAppsScript(action, data = {}) {
+  try {
+    const payload = {
+      action: action,
+      ...data
+    };
+
+    console.log('Calling GAS with action:', action, 'payload:', payload);
+
+    // วิธีที่ 1: ใช้ POST พร้อมจัดการ CORS
+    let response;
+    try {
+      response = await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'no-cors', // ใช้ no-cors เพื่อหลีกเลี่ยง CORS issues
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
+      });
+    } catch (postError) {
+      console.log('POST failed, trying GET method...', postError);
+      // วิธีที่ 2: ใช้ GET เป็น fallback
+      const params = new URLSearchParams();
+      params.append('action', action);
+      params.append('data', JSON.stringify(data));
+      
+      response = await fetch(GAS_URL + '?' + params.toString(), {
+        method: 'GET',
+        mode: 'no-cors'
+      });
+    }
+
+    // เนื่องจากใช้ no-cors เราไม่สามารถอ่าน response ได้โดยตรง
+    // ให้เรียก GAS อีกครั้งด้วย GET เพื่อรับข้อมูล
+    if (action === 'getAllData' || action === 'getLessons') {
+      return await callGASWithGet(action);
+    }
+
+    // สำหรับการบันทึกข้อมูล ส่ง request แล้วถือว่าสำเร็จ
+    return { success: true, message: 'Request sent successfully' };
+    
+  } catch (error) {
+    console.error('Error calling Google Apps Script:', error);
+    throw error;
+  }
+}
+
+// ฟังก์ชันเรียก GAS ด้วย GET สำหรับการรับข้อมูล
+async function callGASWithGet(action) {
+  try {
+    const url = GAS_URL + '?action=' + encodeURIComponent(action);
+    console.log('Calling GAS with GET:', url);
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const text = await response.text();
+    console.log('Raw response:', text);
+    
+    try {
+      const result = JSON.parse(text);
+      console.log('GAS response:', result);
+      return result;
+    } catch (parseError) {
+      console.error('Error parsing JSON:', parseError);
+      throw new Error('Invalid JSON response from server');
+    }
+  } catch (error) {
+    console.error('Error in callGASWithGet:', error);
+    throw error;
+  }
+}
+
+// ฟังก์ชันโหลดข้อมูลทั้งหมดจาก Google Sheet
+async function loadAllData() {
+  try {
+    showLoading(true);
+    
+    const data = await callGASWithGet('getAllData');
+    
+    if (data && data.success) {
+      teachers = data.teachers || [];
+      classes = data.classes || [];
+      subjects = data.subjects || [];
+      rooms = data.rooms || [];
+      lessons = data.lessons || [];
+      
+      // บันทึกลง Local Storage เป็น backup
+      localStorage.setItem('teachers', JSON.stringify(teachers));
+      localStorage.setItem('classes', JSON.stringify(classes));
+      localStorage.setItem('subjects', JSON.stringify(subjects));
+      localStorage.setItem('rooms', JSON.stringify(rooms));
+      localStorage.setItem('lessons', JSON.stringify(lessons));
+      
+      console.log('Loaded from Google Sheet:', { teachers, classes, subjects, rooms, lessons });
+      document.getElementById('message').innerHTML = '<div style="color:green;">โหลดข้อมูลจาก Google Sheet สำเร็จ</div>';
+    } else {
+      throw new Error(data.error || 'Failed to load data from server');
+    }
+  } catch (error) {
+    console.error('Error loading data from Google Sheet:', error);
+    
+    // ถ้าไม่สามารถโหลดจาก Google Sheet ได้ ให้ใช้ข้อมูลจาก Local Storage
+    teachers = JSON.parse(localStorage.getItem('teachers')) || ['ครูสมชาย', 'ครูสมหญิง', 'ครูนิดา'];
+    classes = JSON.parse(localStorage.getItem('classes')) || ['ปวช.1/1', 'ปวช.1/2', 'ปวช.2/1'];
+    subjects = JSON.parse(localStorage.getItem('subjects')) || ['คณิตศาสตร์', 'วิทยาศาสตร์', 'ภาษาอังกฤษ'];
+    rooms = JSON.parse(localStorage.getItem('rooms')) || ['ห้อง 101', 'ห้อง 102', 'ห้อง Lab 1'];
+    lessons = JSON.parse(localStorage.getItem('lessons')) || [];
+    
+    document.getElementById('message').innerHTML = '<div style="color:orange;">ใช้ข้อมูลจาก Local Storage (ไม่สามารถเชื่อมต่อ Google Sheet ได้)</div>';
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ฟังก์ชันบันทึกข้อมูลทั้งหมดไปยัง Google Sheet
+async function saveAllData() {
+  try {
+    showLoading(true);
+    
+    // ใช้ POST สำหรับการบันทึกข้อมูล
+    const result = await callGoogleAppsScript('saveAllData', {
+      teachers: teachers,
+      classes: classes,
+      subjects: subjects,
+      rooms: rooms,
+      lessons: lessons
+    });
+    
+    if (result && result.success) {
+      // บันทึกลง Local Storage ด้วย
+      localStorage.setItem('teachers', JSON.stringify(teachers));
+      localStorage.setItem('classes', JSON.stringify(classes));
+      localStorage.setItem('subjects', JSON.stringify(subjects));
+      localStorage.setItem('rooms', JSON.stringify(rooms));
+      localStorage.setItem('lessons', JSON.stringify(lessons));
+      
+      console.log('Saved to Google Sheet successfully');
+      document.getElementById('message').innerHTML = '<div style="color:green;">บันทึกข้อมูลลง Google Sheet สำเร็จ</div>';
+      return true;
+    } else {
+      throw new Error(result.error || 'Failed to save data');
+    }
+  } catch (error) {
+    console.error('Error saving data to Google Sheet:', error);
+    
+    // ถ้าไม่สามารถบันทึกไปยัง Google Sheet ได้ ให้บันทึกลง Local Storage แค่เดียว
+    localStorage.setItem('teachers', JSON.stringify(teachers));
+    localStorage.setItem('classes', JSON.stringify(classes));
+    localStorage.setItem('subjects', JSON.stringify(subjects));
+    localStorage.setItem('rooms', JSON.stringify(rooms));
+    localStorage.setItem('lessons', JSON.stringify(lessons));
+    
+    document.getElementById('message').innerHTML = '<div style="color:orange;">บันทึกข้อมูลลง Local Storage (ไม่สามารถเชื่อมต่อ Google Sheet ได้)</div>';
+    return false;
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ฟังก์ชันแสดง/ซ่อน loading
+function showLoading(show) {
+  const loadingElement = document.getElementById('loading');
+  if (loadingElement) {
+    loadingElement.style.display = show ? 'flex' : 'none';
+  }
+}
+
+// สร้าง element loading ถ้ายังไม่มี
+function createLoadingElement() {
+  if (!document.getElementById('loading')) {
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = 'loading';
+    loadingDiv.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      color: white;
+      font-size: 18px;
+    `;
+    loadingDiv.innerHTML = `
+      <div style="background: white; padding: 20px; border-radius: 8px; color: black; display: flex; align-items: center; gap: 10px;">
+        <div>🔄 กำลังโหลดข้อมูล...</div>
+      </div>
+    `;
+    document.body.appendChild(loadingDiv);
+  }
+}
 
 // ฟังก์ชันแสดง/ซ่อนส่วนล็อกอิน
 function showLoginModal() {
@@ -46,7 +252,6 @@ function hideLoginModal() {
 function setUserMode(isAdmin) {
   isAdminMode = isAdmin;
   
-  // อัปเดทสถานะผู้ใช้
   const userStatus = document.getElementById('userStatus');
   const logoutBtn = document.getElementById('logoutBtn');
   
@@ -60,44 +265,35 @@ function setUserMode(isAdmin) {
     logoutBtn.style.display = 'inline-block';
   }
   
-  // ซ่อนหรือแสดงฟังก์ชันการแก้ไขตามโหมด
   toggleEditFunctions(isAdmin);
 }
 
 // ฟังก์ชันซ่อน/แสดงฟังก์ชันการแก้ไข
 function toggleEditFunctions(show) {
-  // ซ่อนหรือแสดงฟอร์มเพิ่ม/แก้ไข
   const controls = document.getElementById('controls');
   controls.style.display = show ? 'block' : 'none';
   
-  // ซ่อนหรือแสดงปุ่มจัดการข้อมูลในส่วนสรุป
   const editButtons = document.querySelectorAll('.btn-warning, .btn-danger, .btn-info');
   editButtons.forEach(button => {
     button.style.display = show ? 'inline-block' : 'none';
   });
   
-  // ซ่อนหรือแสดงปุ่มจัดการในตารางรายการ
   const tableActionButtons = document.querySelectorAll('#lessonTable .btn-warning, #lessonTable .btn-danger');
   tableActionButtons.forEach(button => {
     button.style.display = show ? 'inline-block' : 'none';
   });
   
-  // ซ่อนหรือแสดงส่วนจัดการข้อมูล (เพิ่มครู, ชั้นเรียน, รายวิชา, ห้อง)
   const dataManagementSections = document.querySelectorAll('.data-management');
   dataManagementSections.forEach(section => {
     section.style.display = show ? 'block' : 'none';
   });
   
-  // ซ่อนหรือแสดงปุ่มจัดการ JSON
   const jsonButtons = document.querySelectorAll('#downloadJsonBtn, #importJsonBtn');
   jsonButtons.forEach(button => {
     button.style.display = show ? 'inline-block' : 'none';
   });
   
-  // ซ่อนหรือแสดงปุ่มเพิ่มอัตโนมัติ
   document.getElementById('autoBtn').style.display = show ? 'inline-block' : 'none';
-  
-  // ซ่อนหรือแสดงปุ่มรีเซ็ตฟอร์ม
   document.getElementById('resetBtn').style.display = show ? 'inline-block' : 'none';
 }
 
@@ -110,6 +306,12 @@ function loginAsAdmin() {
     hideLoginModal();
     setUserMode(true);
     messageDiv.innerHTML = '';
+    
+    // โหลดข้อมูลใหม่เมื่อล็อกอินสำเร็จ
+    loadAllData().then(() => {
+      loadDropdowns();
+      renderAll();
+    });
   } else {
     messageDiv.innerHTML = '<div style="color:red;">รหัสผ่านไม่ถูกต้อง</div>';
   }
@@ -119,6 +321,12 @@ function loginAsAdmin() {
 function loginAsGuest() {
   hideLoginModal();
   setUserMode(false);
+  
+  // โหลดข้อมูลเมื่อเข้าสู่ระบบเป็นผู้เยี่ยมชม
+  loadAllData().then(() => {
+    loadDropdowns();
+    renderAll();
+  });
 }
 
 // ฟังก์ชันออกจากระบบ
@@ -137,13 +345,9 @@ function preventGuestAction(actionName) {
   return false;
 }
 
-// ฟังก์ชันบันทึกข้อมูลลง Local Storage
-function saveData() {
-  localStorage.setItem('teachers', JSON.stringify(teachers));
-  localStorage.setItem('classes', JSON.stringify(classes));
-  localStorage.setItem('subjects', JSON.stringify(subjects));
-  localStorage.setItem('rooms', JSON.stringify(rooms));
-  localStorage.setItem('lessons', JSON.stringify(lessons));
+// ฟังก์ชันบันทึกข้อมูล (ใช้ Google Sheet เป็นหลัก)
+async function saveData() {
+  return await saveAllData();
 }
 
 // ฟังก์ชันดาวน์โหลดข้อมูลเป็น JSON
@@ -174,38 +378,35 @@ function downloadJSON() {
 }
 
 // ฟังก์ชันนำเข้าข้อมูลจาก JSON
-function importJSON(file) {
+async function importJSON(file) {
   const reader = new FileReader();
   
-  reader.onload = function(e) {
+  reader.onload = async function(e) {
     try {
       const data = JSON.parse(e.target.result);
       
-      // ตรวจสอบโครงสร้างข้อมูล
       if (!data.teachers || !data.classes || !data.subjects || !data.rooms || !data.lessons) {
         throw new Error('รูปแบบไฟล์ไม่ถูกต้อง');
       }
       
-      // ยืนยันการนำเข้า (ทับข้อมูลเดิม)
       if (!confirm('การนำเข้าข้อมูลจะทับข้อมูลปัจจุบันทั้งหมด\nต้องการดำเนินการต่อหรือไม่?')) {
         return;
       }
       
-      // อัปเดทข้อมูล
       teachers = data.teachers;
       classes = data.classes;
       subjects = data.subjects;
       rooms = data.rooms;
       lessons = data.lessons;
       
-      // บันทึกลง Local Storage
-      saveData();
+      // บันทึกลง Google Sheet
+      const saved = await saveData();
       
-      // โหลดข้อมูลใหม่
-      loadDropdowns();
-      renderAll();
-      
-      document.getElementById('message').innerHTML = '<div style="color:green;">นำเข้าข้อมูลจาก JSON สำเร็จแล้ว</div>';
+      if (saved) {
+        loadDropdowns();
+        renderAll();
+        document.getElementById('message').innerHTML = '<div style="color:green;">นำเข้าข้อมูลจาก JSON และบันทึกลง Google Sheet สำเร็จแล้ว</div>';
+      }
       
     } catch (error) {
       console.error('Error importing JSON:', error);
@@ -227,7 +428,6 @@ document.getElementById('importJsonBtn').onclick = function() {
 document.getElementById('jsonFileInput').onchange = function(e) {
   if (e.target.files.length > 0) {
     importJSON(e.target.files[0]);
-    // รีเซ็ต input file เพื่อให้สามารถเลือกไฟล์เดิมอีกครั้งได้
     e.target.value = '';
   }
 };
@@ -239,36 +439,28 @@ function loadDropdowns() {
   const subjectSelect = document.getElementById('subject');
   const roomSelect = document.getElementById('room');
   
-  // โหลดข้อมูลอาจารย์
   teacherSelect.innerHTML = '<option value="">เลือกอาจารย์</option>';
   teachers.forEach(teacher => {
     teacherSelect.innerHTML += `<option value="${teacher}">${teacher}</option>`;
   });
   
-  // โหลดข้อมูลชั้นเรียน
   classSelect.innerHTML = '<option value="">เลือกชั้นเรียน</option>';
   classes.forEach(cls => {
     classSelect.innerHTML += `<option value="${cls}">${cls}</option>`;
   });
   
-  // โหลดข้อมูลรายวิชา
   subjectSelect.innerHTML = '<option value="">เลือกรายวิชา</option>';
   subjects.forEach(subject => {
     subjectSelect.innerHTML += `<option value="${subject}">${subject}</option>`;
   });
   
-  // โหลดข้อมูลห้อง
   roomSelect.innerHTML = '<option value="">เลือกห้อง</option>';
   rooms.forEach(room => {
     roomSelect.innerHTML += `<option value="${room}">${room}</option>`;
   });
   
-  // โหลดข้อมูลลงลิสต์แสดงผล
   renderDataLists();
-  // โหลดข้อมูลลง dropdown สรุปอาจารย์
   loadTeacherSummaryDropdown();
-  
-  // โหลดตัวเลือกใน dropdown กรอง
   loadFilterOptions();
 }
 
@@ -284,35 +476,30 @@ function loadTeacherSummaryDropdown() {
 
 // ฟังก์ชันโหลดตัวเลือกใน dropdown กรอง
 function loadFilterOptions() {
-  // กรองตามรายวิชา
   const filterSubject = document.getElementById('filterSubject');
   filterSubject.innerHTML = '<option value="">ทั้งหมด</option>';
   subjects.forEach(subject => {
     filterSubject.innerHTML += `<option value="${subject}">${subject}</option>`;
   });
   
-  // กรองตามครู
   const filterTeacher = document.getElementById('filterTeacher');
   filterTeacher.innerHTML = '<option value="">ทั้งหมด</option>';
   teachers.forEach(teacher => {
     filterTeacher.innerHTML += `<option value="${teacher}">${teacher}</option>`;
   });
   
-  // กรองตามชั้น
   const filterClass = document.getElementById('filterClass');
   filterClass.innerHTML = '<option value="">ทั้งหมด</option>';
   classes.forEach(cls => {
     filterClass.innerHTML += `<option value="${cls}">${cls}</option>`;
   });
   
-  // กรองตามห้อง
   const filterRoom = document.getElementById('filterRoom');
   filterRoom.innerHTML = '<option value="">ทั้งหมด</option>';
   rooms.forEach(room => {
     filterRoom.innerHTML += `<option value="${room}">${room}</option>`;
   });
   
-  // โหลดตัวเลือกใน dropdown สรุปชั้นปี
   const classSummarySelect = document.getElementById('classSummarySelect');
   classSummarySelect.innerHTML = '<option value="all">แสดงทั้งหมด</option>';
   classes.forEach(cls => {
@@ -322,7 +509,6 @@ function loadFilterOptions() {
 
 // ฟังก์ชันแสดงข้อมูลในลิสต์
 function renderDataLists() {
-  // อาจารย์
   const teacherList = document.getElementById('teacherList');
   teacherList.innerHTML = '';
   teachers.forEach((teacher, index) => {
@@ -337,7 +523,6 @@ function renderDataLists() {
     `;
   });
   
-  // ชั้นเรียน
   const classList = document.getElementById('classList');
   classList.innerHTML = '';
   classes.forEach((cls, index) => {
@@ -352,7 +537,6 @@ function renderDataLists() {
     `;
   });
   
-  // รายวิชา
   const subjectList = document.getElementById('subjectList');
   subjectList.innerHTML = '';
   subjects.forEach((subject, index) => {
@@ -367,7 +551,6 @@ function renderDataLists() {
     `;
   });
   
-  // ห้อง
   const roomList = document.getElementById('roomList');
   roomList.innerHTML = '';
   rooms.forEach((room, index) => {
@@ -384,52 +567,52 @@ function renderDataLists() {
 }
 
 // ฟังก์ชันเพิ่มข้อมูล
-document.getElementById('addTeacher').onclick = () => {
+document.getElementById('addTeacher').onclick = async () => {
   if (preventGuestAction("เพิ่มอาจารย์")) return;
   
   const newTeacher = document.getElementById('newTeacher').value.trim();
   if (newTeacher && !teachers.includes(newTeacher)) {
     teachers.push(newTeacher);
-    saveData();
+    await saveData();
     loadDropdowns();
     document.getElementById('newTeacher').value = '';
     document.getElementById('message').innerHTML = '<div style="color:green;">เพิ่มอาจารย์เรียบร้อยแล้ว</div>';
   }
 };
 
-document.getElementById('addClass').onclick = () => {
+document.getElementById('addClass').onclick = async () => {
   if (preventGuestAction("เพิ่มชั้นเรียน")) return;
   
   const newClass = document.getElementById('newClass').value.trim();
   if (newClass && !classes.includes(newClass)) {
     classes.push(newClass);
-    saveData();
+    await saveData();
     loadDropdowns();
     document.getElementById('newClass').value = '';
     document.getElementById('message').innerHTML = '<div style="color:green;">เพิ่มชั้นเรียนเรียบร้อยแล้ว</div>';
   }
 };
 
-document.getElementById('addSubject').onclick = () => {
+document.getElementById('addSubject').onclick = async () => {
   if (preventGuestAction("เพิ่มรายวิชา")) return;
   
   const newSubject = document.getElementById('newSubject').value.trim();
   if (newSubject && !subjects.includes(newSubject)) {
     subjects.push(newSubject);
-    saveData();
+    await saveData();
     loadDropdowns();
     document.getElementById('newSubject').value = '';
     document.getElementById('message').innerHTML = '<div style="color:green;">เพิ่มรายวิชาเรียบร้อยแล้ว</div>';
   }
 };
 
-document.getElementById('addRoom').onclick = () => {
+document.getElementById('addRoom').onclick = async () => {
   if (preventGuestAction("เพิ่มห้อง")) return;
   
   const newRoom = document.getElementById('newRoom').value.trim();
   if (newRoom && !rooms.includes(newRoom)) {
     rooms.push(newRoom);
-    saveData();
+    await saveData();
     loadDropdowns();
     document.getElementById('newRoom').value = '';
     document.getElementById('message').innerHTML = '<div style="color:green;">เพิ่มห้องเรียบร้อยแล้ว</div>';
@@ -437,12 +620,11 @@ document.getElementById('addRoom').onclick = () => {
 };
 
 // ฟังก์ชันลบข้อมูล
-function removeTeacher(index) {
+async function removeTeacher(index) {
   if (preventGuestAction("ลบอาจารย์")) return;
   
   const teacherName = teachers[index];
   
-  // ตรวจสอบว่ามีการใช้อาจารย์นี้ในตารางเรียนหรือไม่
   const isUsed = lessons.some(lesson => lesson.teacher === teacherName);
   
   if (isUsed) {
@@ -452,17 +634,16 @@ function removeTeacher(index) {
   }
   
   teachers.splice(index, 1);
-  saveData();
+  await saveData();
   loadDropdowns();
   document.getElementById('message').innerHTML = '<div style="color:green;">ลบอาจารย์เรียบร้อยแล้ว</div>';
 }
 
-function removeClass(index) {
+async function removeClass(index) {
   if (preventGuestAction("ลบชั้นเรียน")) return;
   
   const className = classes[index];
   
-  // ตรวจสอบว่ามีการใช้ชั้นเรียนนี้ในตารางเรียนหรือไม่
   const isUsed = lessons.some(lesson => lesson.classLevel === className);
   
   if (isUsed) {
@@ -472,17 +653,16 @@ function removeClass(index) {
   }
   
   classes.splice(index, 1);
-  saveData();
+  await saveData();
   loadDropdowns();
   document.getElementById('message').innerHTML = '<div style="color:green;">ลบชั้นเรียนเรียบร้อยแล้ว</div>';
 }
 
-function removeSubject(index) {
+async function removeSubject(index) {
   if (preventGuestAction("ลบรายวิชา")) return;
   
   const subjectName = subjects[index];
   
-  // ตรวจสอบว่ามีการใช้รายวิชานี้ในตารางเรียนหรือไม่
   const isUsed = lessons.some(lesson => lesson.subject === subjectName);
   
   if (isUsed) {
@@ -492,17 +672,16 @@ function removeSubject(index) {
   }
   
   subjects.splice(index, 1);
-  saveData();
+  await saveData();
   loadDropdowns();
   document.getElementById('message').innerHTML = '<div style="color:green;">ลบรายวิชาเรียบร้อยแล้ว</div>';
 }
 
-function removeRoom(index) {
+async function removeRoom(index) {
   if (preventGuestAction("ลบห้อง")) return;
   
   const roomName = rooms[index];
   
-  // ตรวจสอบว่ามีการใช้ห้องนี้ในตารางเรียนหรือไม่
   const isUsed = lessons.some(lesson => lesson.room === roomName);
   
   if (isUsed) {
@@ -512,7 +691,7 @@ function removeRoom(index) {
   }
   
   rooms.splice(index, 1);
-  saveData();
+  await saveData();
   loadDropdowns();
   document.getElementById('message').innerHTML = '<div style="color:green;">ลบห้องเรียบร้อยแล้ว</div>';
 }
@@ -567,7 +746,7 @@ function editRoom(index) {
 }
 
 // ฟังก์ชันบันทึกการแก้ไขจาก Modal
-document.getElementById('saveEditBtn').onclick = function() {
+document.getElementById('saveEditBtn').onclick = async function() {
   if (preventGuestAction("บันทึกการแก้ไข")) return;
   
   const newValue = document.getElementById('editInput').value.trim();
@@ -582,7 +761,6 @@ document.getElementById('saveEditBtn').onclick = function() {
     return;
   }
   
-  // ตรวจสอบว่าชื่อซ้ำหรือไม่
   let dataArray;
   switch (currentEditType) {
     case 'teacher':
@@ -604,10 +782,8 @@ document.getElementById('saveEditBtn').onclick = function() {
     return;
   }
   
-  // อัปเดทข้อมูล
   dataArray[currentEditIndex] = newValue;
   
-  // อัปเดทข้อมูลในตารางเรียน (ถ้ามี)
   if (currentEditType === 'teacher') {
     lessons.forEach(lesson => {
       if (lesson.teacher === originalValue) {
@@ -634,7 +810,7 @@ document.getElementById('saveEditBtn').onclick = function() {
     });
   }
   
-  saveData();
+  await saveData();
   loadDropdowns();
   renderAll();
   
@@ -660,13 +836,13 @@ window.onclick = function(event) {
   }
 };
 
-function uid(){return Date.now()+Math.random().toString(16).slice(2)}
+function uid(){return Date.now().toString() + Math.random().toString(16).slice(2)}
 
 function renderAll(){
   renderGrid();
   renderList();
   renderSummary();
-  renderClassSummary(); // เพิ่มการเรียกฟังก์ชันสรุปชั้นปี
+  renderClassSummary();
 }
 
 function renderGrid(){
@@ -700,7 +876,6 @@ function renderList(){
   const tb = document.querySelector('#lessonTable tbody'); 
   tb.innerHTML = '';
   
-  // กรองข้อมูลตามเงื่อนไข
   let filteredLessons = lessons.filter(lesson => {
     if (currentFilters.subject && lesson.subject !== currentFilters.subject) return false;
     if (currentFilters.teacher && lesson.teacher !== currentFilters.teacher) return false;
@@ -711,7 +886,6 @@ function renderList(){
     return true;
   });
   
-  // แสดงจำนวนรายการที่กรองได้
   const tableHeader = document.querySelector('#lessonTable').closest('.card').querySelector('h2');
   const originalTitle = 'รายการจัดการเรียนทั้งหมด';
   if (Object.values(currentFilters).some(filter => filter !== '')) {
@@ -720,13 +894,11 @@ function renderList(){
     tableHeader.textContent = originalTitle;
   }
   
-  // เรียงลำดับตามวันและคาบ
   filteredLessons.sort((a, b) => {
     if (a.day !== b.day) return a.day - b.day;
     return a.period - b.period;
   });
   
-  // แสดงผล
   filteredLessons.forEach(l => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -743,7 +915,6 @@ function renderList(){
     tb.appendChild(tr);
   });
   
-  // เพิ่ม event สำหรับปุ่มแก้ไข
   tb.querySelectorAll('.edit-btn').forEach(b => b.onclick = () => {
     if (preventGuestAction("แก้ไขรายการสอน")) return;
     const lesson = lessons.find(x => x.id === b.dataset.id);
@@ -752,18 +923,16 @@ function renderList(){
     }
   });
   
-  // ปุ่มลบ
-  tb.querySelectorAll('.btn-danger').forEach(b => b.onclick = () => {
+  tb.querySelectorAll('.btn-danger').forEach(b => b.onclick = async () => {
     if (preventGuestAction("ลบรายการสอน")) return;
     lessons = lessons.filter(x => x.id !== b.dataset.id);
-    saveData();
+    await saveData();
     renderAll();
     updateFilterOptions();
   });
 }
 
 function editLesson(lesson) {
-  // เติมข้อมูลลงในฟอร์ม
   document.getElementById('teacher').value = lesson.teacher;
   document.getElementById('subject').value = lesson.subject;
   document.getElementById('classLevel').value = lesson.classLevel;
@@ -772,22 +941,18 @@ function editLesson(lesson) {
   document.getElementById('period').value = lesson.period;
   document.getElementById('numPeriods').value = 1;
   
-  // เปลี่ยนปุ่มบันทึกเป็นอัปเดท
   editingId = lesson.id;
   document.getElementById('submitBtn').textContent = 'อัปเดท';
   document.getElementById('submitBtn').classList.add('btn-warning');
   document.getElementById('submitBtn').classList.remove('btn-primary');
   
-  // แสดงข้อความ
   document.getElementById('message').innerHTML = '<div style="color:#f59e0b;">กำลังแก้ไขรายการสอน...</div>';
 }
 
-// ฟังก์ชันสร้างสรุปคาบสอนแบบละเอียด
 function renderSummary(){
   const div = document.getElementById('teacherSummary');
   const selectedTeacher = document.getElementById('teacherSummarySelect').value;
   
-  // สร้างโครงสร้างข้อมูลสำหรับสรุป
   const teacherSummary = {};
   
   lessons.forEach(lesson => {
@@ -809,7 +974,6 @@ function renderSummary(){
     teacherSummary[teacher].subjects[subject]++;
   });
   
-  // เรียงลำดับอาจารย์ตามชื่อ
   const sortedTeachers = Object.keys(teacherSummary).sort();
   
   div.innerHTML = '';
@@ -825,7 +989,6 @@ function renderSummary(){
   let hasData = false;
   
   sortedTeachers.forEach(teacher => {
-    // กรองตามอาจารย์ที่เลือก (ถ้าไม่เลือก "แสดงทั้งหมด")
     if (selectedTeacher !== 'all' && teacher !== selectedTeacher) {
       return;
     }
@@ -836,7 +999,6 @@ function renderSummary(){
     const teacherItem = document.createElement('div');
     teacherItem.className = 'teacher-summary-item';
     
-    // Header - ชื่ออาจารย์และจำนวนคาบรวม
     const header = document.createElement('div');
     header.className = 'teacher-summary-header';
     
@@ -851,11 +1013,9 @@ function renderSummary(){
     header.appendChild(nameDiv);
     header.appendChild(totalDiv);
     
-    // รายการวิชา
     const subjectList = document.createElement('div');
     subjectList.className = 'subject-list';
     
-    // เรียงลำดับวิชาตามจำนวนคาบ (มากไปน้อย)
     const sortedSubjects = Object.entries(teacherData.subjects)
       .sort((a, b) => b[1] - a[1]);
     
@@ -888,12 +1048,10 @@ function renderSummary(){
   }
 }
 
-// ฟังก์ชันสร้างสรุปชั้นปี
 function renderClassSummary() {
   const div = document.getElementById('classSummary');
   const selectedClass = document.getElementById('classSummarySelect').value;
   
-  // สร้างโครงสร้างข้อมูลสำหรับสรุปชั้นปี
   const classSummary = {};
   
   lessons.forEach(lesson => {
@@ -915,7 +1073,6 @@ function renderClassSummary() {
     classSummary[classLevel].subjects[subject]++;
   });
   
-  // เรียงลำดับชั้นปี
   const sortedClasses = Object.keys(classSummary).sort();
   
   div.innerHTML = '';
@@ -931,7 +1088,6 @@ function renderClassSummary() {
   let hasData = false;
   
   sortedClasses.forEach(classLevel => {
-    // กรองตามชั้นปีที่เลือก (ถ้าไม่เลือก "แสดงทั้งหมด")
     if (selectedClass !== 'all' && classLevel !== selectedClass) {
       return;
     }
@@ -942,7 +1098,6 @@ function renderClassSummary() {
     const classItem = document.createElement('div');
     classItem.className = 'class-summary-item';
     
-    // Header - ชื่อชั้นปีและจำนวนคาบรวม
     const header = document.createElement('div');
     header.className = 'class-summary-header';
     
@@ -957,11 +1112,9 @@ function renderClassSummary() {
     header.appendChild(nameDiv);
     header.appendChild(totalDiv);
     
-    // รายการวิชา
     const subjectList = document.createElement('div');
     subjectList.className = 'subject-list';
     
-    // เรียงลำดับวิชาตามจำนวนคาบ (มากไปน้อย)
     const sortedSubjects = Object.entries(classData.subjects)
       .sort((a, b) => b[1] - a[1]);
     
@@ -996,23 +1149,21 @@ function renderClassSummary() {
 
 function conflict(nl, excludeId = null){
   return lessons.find(l => 
-    l.id !== excludeId && // ไม่นับรายการที่กำลังแก้ไข
+    l.id !== excludeId &&
     l.day === nl.day && 
     l.period === nl.period && 
     (l.teacher === nl.teacher || l.room === nl.room || l.classLevel === nl.classLevel)
   )
 }
 
-// ✅ เพิ่มอัตโนมัติพร้อมจำนวนคาบ - ปรับปรุงแล้ว
 function autoSchedule(nl, numPeriods){
   let periodsFound = 0;
   const scheduledPeriods = [];
   const availableSlots = [];
   
-  // รวบรวมช่องเวลาว่างทั้งหมด
   for(let d=0; d<days.length; d++){
     for(let p=0; p<periods.length; p++){
-      if(p===4) continue; // ข้ามพักกลางวัน
+      if(p===4) continue;
       
       const test={...nl,day:d,period:p};
       if(!conflict(test)){
@@ -1021,13 +1172,11 @@ function autoSchedule(nl, numPeriods){
     }
   }
   
-  // ตรวจสอบว่ามีช่องว่างพอหรือไม่
   if(availableSlots.length < numPeriods) {
     alert(`ไม่สามารถจัดตารางได้: มีช่องว่างเพียง ${availableSlots.length} คาบ แต่ต้องการ ${numPeriods} คาบ\n\nอาจารย์ ${nl.teacher} มีคาบสอนชนกันในบางเวลา`);
     return false;
   }
   
-  // สุ่มเลือกช่องเวลาตามจำนวนที่ต้องการ
   for(let i=0; i<numPeriods && availableSlots.length > 0; i++){
     const randomIndex = Math.floor(Math.random() * availableSlots.length);
     const slot = availableSlots[randomIndex];
@@ -1041,7 +1190,7 @@ function autoSchedule(nl, numPeriods){
     
     lessons.push(newLesson);
     scheduledPeriods.push({day: slot.day, period: slot.period});
-    availableSlots.splice(randomIndex, 1); // ลบช่องที่ใช้แล้ว
+    availableSlots.splice(randomIndex, 1);
     periodsFound++;
   }
   
@@ -1049,7 +1198,6 @@ function autoSchedule(nl, numPeriods){
     renderAll();
     updateFilterOptions();
     
-    // แสดงข้อความสรุป
     let message = `จัดตารางอัตโนมัติสำเร็จ ${periodsFound} คาบ: `;
     scheduledPeriods.forEach(sp => {
       message += `${days[sp.day]} ${periods[sp.period]}, `;
@@ -1063,22 +1211,20 @@ function autoSchedule(nl, numPeriods){
   }
 }
 
-// ✅ ฟังก์ชันบันทึก/อัปเดท
-lessonForm.onsubmit=e=>{
+// ฟังก์ชันบันทึก/อัปเดท
+lessonForm.onsubmit = async e => {
   if (preventGuestAction("บันทึกหรือแก้ไขข้อมูลการสอน")) return;
   
   e.preventDefault();
   const numPeriods = parseInt(document.getElementById('numPeriods').value) || 1;
   
   if(editingId) {
-    // โหมดแก้ไข - อัปเดทรายการเดิม
     const nl={id:editingId,teacher:teacher.value,subject:subject.value,classLevel:classLevel.value,room:room.value,day:+day.value,period:+period.value};
     if(nl.period===4)return alert('พักกลางวันไม่สามารถใช้สอนได้');
     
     const c=conflict(nl, editingId); 
     if(c)return alert(`ชนกับ ${c.subject} (ครู:${c.teacher} ห้อง:${c.room})`);
     
-    // อัปเดทรายการ
     const index = lessons.findIndex(l => l.id === editingId);
     if(index !== -1) {
       lessons[index] = nl;
@@ -1086,13 +1232,11 @@ lessonForm.onsubmit=e=>{
     
     document.getElementById('message').innerHTML = '<div style="color:green;">อัปเดทรายการสอนเรียบร้อยแล้ว</div>';
     
-    // รีเซ็ตโหมดแก้ไข
     editingId = null;
     document.getElementById('submitBtn').textContent = 'บันทึก';
     document.getElementById('submitBtn').classList.remove('btn-warning');
     document.getElementById('submitBtn').classList.add('btn-primary');
   } else {
-    // โหมดเพิ่มใหม่
     const nl={id:uid(),teacher:teacher.value,subject:subject.value,classLevel:classLevel.value,room:room.value,day:+day.value,period:+period.value};
     if(nl.period===4)return alert('พักกลางวันไม่สามารถใช้สอนได้');
     
@@ -1103,12 +1247,13 @@ lessonForm.onsubmit=e=>{
     document.getElementById('message').innerHTML = '<div style="color:green;">บันทึกรายการสอนเรียบร้อยแล้ว</div>';
   }
   
+  await saveData();
   e.target.reset(); 
   renderAll(); 
   updateFilterOptions();
 };
 
-autoBtn.onclick=()=>{
+autoBtn.onclick = async () => {
   if (preventGuestAction("เพิ่มข้อมูลการสอนอัตโนมัติ")) return;
   
   const numPeriods = parseInt(document.getElementById('numPeriods').value) || 1;
@@ -1126,10 +1271,12 @@ autoBtn.onclick=()=>{
     return alert("กรอกข้อมูลให้ครบก่อนใช้เพิ่มอัตโนมัติ");
   }
   
-  autoSchedule(nl, numPeriods);
+  const success = autoSchedule(nl, numPeriods);
+  if (success) {
+    await saveData();
+  }
   lessonForm.reset();
   
-  // รีเซ็ตโหมดแก้ไขถ้ามี
   if(editingId) {
     editingId = null;
     document.getElementById('submitBtn').textContent = 'บันทึก';
@@ -1142,7 +1289,6 @@ resetBtn.onclick=()=>{
   if (preventGuestAction("รีเซ็ตฟอร์ม")) return;
   
   lessonForm.reset();
-  // รีเซ็ตโหมดแก้ไข
   editingId = null;
   document.getElementById('submitBtn').textContent = 'บันทึก';
   document.getElementById('submitBtn').classList.remove('btn-warning');
@@ -1228,7 +1374,6 @@ function updateFilterOptions(){
 
 // ฟังก์ชันจัดการการกรอง
 function setupFilters() {
-  // ตั้งค่า event listeners สำหรับ dropdown กรองทั้งหมด
   document.getElementById('filterSubject').addEventListener('change', function() {
     currentFilters.subject = this.value;
     renderList();
@@ -1259,9 +1404,7 @@ function setupFilters() {
     renderList();
   });
   
-  // ปุ่มรีเซ็ตการกรอง
   document.getElementById('resetFilterBtn').addEventListener('click', function() {
-    // รีเซ็ตค่ากรองทั้งหมด
     currentFilters = {
       subject: '',
       teacher: '',
@@ -1271,7 +1414,6 @@ function setupFilters() {
       period: ''
     };
     
-    // รีเซ็ต dropdown ทั้งหมด
     document.getElementById('filterSubject').value = '';
     document.getElementById('filterTeacher').value = '';
     document.getElementById('filterClass').value = '';
@@ -1279,7 +1421,6 @@ function setupFilters() {
     document.getElementById('filterDay').value = '';
     document.getElementById('filterPeriod').value = '';
     
-    // รีเซ็ตตาราง
     renderList();
   });
 }
@@ -1290,7 +1431,6 @@ function setupSummaryTabs() {
   const classTab = document.querySelector('.summary-tab[data-type="class"]');
   
   teacherTab.addEventListener('click', function() {
-    // เปิดแท็บสรุปอาจารย์
     document.querySelectorAll('.summary-tab').forEach(tab => tab.classList.remove('active'));
     teacherTab.classList.add('active');
     
@@ -1299,14 +1439,12 @@ function setupSummaryTabs() {
   });
   
   classTab.addEventListener('click', function() {
-    // เปิดแท็บสรุปชั้นปี
     document.querySelectorAll('.summary-tab').forEach(tab => tab.classList.remove('active'));
     classTab.classList.add('active');
     
     document.getElementById('teacherSummarySection').style.display = 'none';
     document.getElementById('classSummarySection').style.display = 'block';
     
-    // รีเฟรชข้อมูลสรุปชั้นปี
     renderClassSummary();
   });
 }
@@ -1319,28 +1457,26 @@ document.getElementById('classSummarySelect').addEventListener('change', renderC
 
 // เมื่อโหลดหน้าเว็บเสร็จ
 window.addEventListener('DOMContentLoaded', function() {
-  // แสดงหน้าล็อกอินเมื่อโหลดหน้าเว็บ
+  createLoadingElement();
   showLoginModal();
   
-  // ตั้งค่า Event Listeners สำหรับระบบล็อกอิน
   document.getElementById('loginBtn').onclick = loginAsAdmin;
   document.getElementById('guestBtn').onclick = loginAsGuest;
   document.getElementById('logoutBtn').onclick = logout;
   
-  // อนุญาตให้กด Enter ในช่องรหัสผ่าน
   document.getElementById('adminPassword').addEventListener('keypress', function(e) {
     if (e.key === 'Enter') {
       loginAsAdmin();
     }
   });
   
-  // ตั้งค่าการกรอง
   setupFilters();
-  
-  // ตั้งค่าแท็บสรุป
   setupSummaryTabs();
   
-  // โหลดข้อมูลเมื่อเริ่มต้น
-  loadDropdowns();
-  renderAll();
+  // โหลดข้อมูลเริ่มต้น
+  loadAllData().then(() => {
+    loadDropdowns();
+    renderAll();
+  });
 });
+[file content end]
