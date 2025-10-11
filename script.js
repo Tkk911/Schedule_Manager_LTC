@@ -3,7 +3,7 @@
 const periods=["คาบ 1 (08:30-09:20)","คาบ 2 (09:20-10:10)","คาบ 3 (10:20-11:10)","คาบ 4 (11:10-12:00)","พักกลางวัน","คาบ 5 (12:50-13:40)","คาบ 6 (13:40-14:30)","คาบ 7 (14:30-15:20)"];
 const days=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
 // เปลี่ยน URL นี้เป็น URL จาก Google Apps Script ที่คุณได้หลังจาก Deploy
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbymK9ipURLr7NRZUq1nd7-BzNFA_0NyvJDutTdOVDWZGV1Oz_IpBHMxJqrVQsXlJucrYQ/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwMUF3O5UwRKB4IXHcV17-KUcRsRGqQL3IhgJVK6nPQLNohHqGWtInU8FL-aCyT3Tu09Q/exec';
 
 let lessons = [];
 let teachers = [];
