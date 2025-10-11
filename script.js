@@ -29,7 +29,77 @@ let currentFilters = {
 
 // เพิ่มตัวแปรสำหรับจัดการโหมด
 let isAdminMode = false;
-const ADMIN_PASSWORD = "admin452026"; // รหัสผ่านสำหรับโหมด Admin
+const ADMIN_PASSWORD = "admin123"; // รหัสผ่านสำหรับโหมด Admin
+
+// ตัวแปรสำหรับ URL ของไฟล์ JSON บน GitHub
+const GITHUB_JSON_URL = 'https://raw.githubusercontent.com/tkk911/Schedule_Manager_LTC/main/timetable_backup_2025-10-07%20(2).json';
+
+// ฟังก์ชันโหลดข้อมูลจาก GitHub
+async function loadDataFromGitHub() {
+  try {
+    const response = await fetch(GITHUB_JSON_URL);
+    if (!response.ok) {
+      throw new Error('ไม่สามารถโหลดข้อมูลจาก GitHub ได้');
+    }
+    
+    const data = await response.json();
+    
+    // อัปเดทข้อมูลใน localStorage
+    localStorage.setItem('teachers', JSON.stringify(data.teachers));
+    localStorage.setItem('classes', JSON.stringify(data.classes));
+    localStorage.setItem('subjects', JSON.stringify(data.subjects));
+    localStorage.setItem('rooms', JSON.stringify(data.rooms));
+    localStorage.setItem('lessons', JSON.stringify(data.lessons));
+    
+    // อัปเดทตัวแปรใน memory
+    teachers = data.teachers;
+    classes = data.classes;
+    subjects = data.subjects;
+    rooms = data.rooms;
+    lessons = data.lessons;
+    
+    console.log('โหลดข้อมูลจาก GitHub สำเร็จ');
+    return true;
+  } catch (error) {
+    console.error('Error loading data from GitHub:', error);
+    return false;
+  }
+}
+
+// ฟังก์ชันรีเฟรชข้อมูลจาก GitHub
+async function refreshDataFromGitHub() {
+  document.getElementById('message').innerHTML = '<div style="color:blue;">กำลังโหลดข้อมูลจากระบบ...</div>';
+  
+  const success = await loadDataFromGitHub();
+  
+  if (success) {
+    loadDropdowns();
+    renderAll();
+    document.getElementById('message').innerHTML = '<div style="color:green;">อัปเดทข้อมูลล่าสุดจากระบบเรียบร้อยแล้ว</div>';
+  } else {
+    document.getElementById('message').innerHTML = '<div style="color:red;">ไม่สามารถโหลดข้อมูลจากระบบได้</div>';
+  }
+}
+
+// ฟังก์ชันตรวจสอบและโหลดข้อมูลล่าสุดเมื่อเริ่มต้น
+async function checkAndLoadLatestData() {
+  // ตรวจสอบว่ามีข้อมูลใน localStorage หรือไม่
+  const hasLocalData = localStorage.getItem('lessons') !== null;
+  
+  if (!hasLocalData) {
+    // ถ้าไม่มีข้อมูลในเครื่อง ให้โหลดจาก GitHub
+    const success = await loadDataFromGitHub();
+    if (success) {
+      console.log('โหลดข้อมูลเริ่มต้นจาก GitHub สำเร็จ');
+    } else {
+      console.log('ใช้ข้อมูลเริ่มต้นในเครื่อง');
+    }
+  }
+  
+  // โหลดข้อมูลลง UI
+  loadDropdowns();
+  renderAll();
+}
 
 // ฟังก์ชันแสดง/ซ่อนส่วนล็อกอิน
 function showLoginModal() {
@@ -231,6 +301,9 @@ document.getElementById('jsonFileInput').onchange = function(e) {
     e.target.value = '';
   }
 };
+
+// เพิ่ม Event Listener สำหรับปุ่มรีเฟรช
+document.getElementById('refreshDataBtn').onclick = refreshDataFromGitHub;
 
 // ฟังก์ชันโหลดข้อมูลลง dropdown
 function loadDropdowns() {
@@ -1318,7 +1391,7 @@ document.getElementById('teacherSummarySelect').addEventListener('change', rende
 document.getElementById('classSummarySelect').addEventListener('change', renderClassSummary);
 
 // เมื่อโหลดหน้าเว็บเสร็จ
-window.addEventListener('DOMContentLoaded', function() {
+window.addEventListener('DOMContentLoaded', async function() {
   // แสดงหน้าล็อกอินเมื่อโหลดหน้าเว็บ
   showLoginModal();
   
@@ -1340,7 +1413,6 @@ window.addEventListener('DOMContentLoaded', function() {
   // ตั้งค่าแท็บสรุป
   setupSummaryTabs();
   
-  // โหลดข้อมูลเมื่อเริ่มต้น
-  loadDropdowns();
-  renderAll();
+  // โหลดข้อมูลล่าสุด
+  await checkAndLoadLatestData();
 });
