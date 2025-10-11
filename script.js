@@ -2,7 +2,7 @@ const periods = ["คาบ 1 (08:30-09:20)", "คาบ 2 (09:20-10:10)", "ค�
 const days = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร️"];
 
 // URL ของ Google Apps Script - เปลี่ยนเป็น URL ของคุณหลังจาก Deploy
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbzYD73YxNXTwiKiR4oKNpHh5ht-azmvjK0ZHuKqajUoxha4T4r4c2f0uVmlWZAVfkyk/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwl7NPnWlng4EfAcjn-mXD79e-h6_ELFszuhiX0ISHEB0Wfr8Q4X1q65PevfFZe9P5pWQ/exec';
 
 let lessons = [];
 let teachers = [];
@@ -31,101 +31,114 @@ let isAdminMode = false;
 const ADMIN_PASSWORD = "admin452026";
 
 // =============================================
-// ฟังก์ชันจัดการ Google Apps Script
+// ฟังก์ชันจัดการ Google Apps Script (แก้ไขใหม่)
 // =============================================
 
-// ฟังก์ชันเรียกใช้งาน Google Apps Script
+// ฟังก์ชันเรียกใช้งาน Google Apps Script แบบใหม่
 async function callGoogleAppsScript(action, data = {}) {
   return new Promise((resolve, reject) => {
-    const requestId = 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-    console.log(`[${requestId}] Calling GAS:`, action, data);
+    const requestId = 'req_' + Date.now();
+    console.log(`[${requestId}] Calling GAS:`, action);
     
-    // สร้าง iframe สำหรับการสื่อสาร
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.id = 'gas-iframe-' + requestId;
-    
-    // สร้าง URL พร้อม parameters
+    // ใช้ XMLHttpRequest แทน iframe
+    const xhr = new XMLHttpRequest();
     const params = new URLSearchParams();
     params.append('action', action);
     params.append('data', JSON.stringify(data));
     params.append('rnd', Date.now());
     
-    iframe.src = GAS_URL + '?' + params.toString();
+    const url = GAS_URL + '?' + params.toString();
     
-    // ตั้งค่า event listener สำหรับรับข้อมูล
-    const messageHandler = function(event) {
-      // ตรวจสอบว่าเป็นข้อมูลจาก GAS หรือไม่
-      if (event.data && event.data.type === 'GAS_RESPONSE') {
-        console.log(`[${requestId}] Received GAS response:`, event.data.data);
-        
-        // ล้าง event listener
-        window.removeEventListener('message', messageHandler);
-        
-        // ลบ iframe
-        if (document.body.contains(iframe)) {
-          document.body.removeChild(iframe);
+    xhr.open('GET', url, true);
+    xhr.timeout = 30000;
+    
+    xhr.onload = function() {
+      console.log(`[${requestId}] XHR loaded, status: ${xhr.status}`);
+      
+      if (xhr.status === 200) {
+        try {
+          // พยายามแยกข้อมูลจาก HTML response
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(xhr.responseText, 'text/html');
+          const dataElement = doc.getElementById('data');
+          
+          if (dataElement) {
+            const dataText = dataElement.textContent;
+            const result = JSON.parse(dataText);
+            resolve(result);
+          } else {
+            // Fallback: ลองหา JSON ใน response
+            const jsonMatch = xhr.responseText.match(/<script[^>]*>.*?({.*?}).*?<\/script>/);
+            if (jsonMatch) {
+              const result = JSON.parse(jsonMatch[1]);
+              resolve(result);
+            } else {
+              throw new Error('Cannot parse response');
+            }
+          }
+        } catch (error) {
+          console.error('Parse error:', error);
+          reject(new Error('Failed to parse response: ' + error.message));
         }
-        
-        // ล้าง timeout
-        clearTimeout(timeoutId);
-        
-        // ส่งผลลัพธ์กลับ
-        resolve(event.data.data);
-      }
-    };
-    
-    window.addEventListener('message', messageHandler);
-    
-    // เพิ่ม iframe ไปยัง document
-    document.body.appendChild(iframe);
-    
-    // Timeout fallback (30 seconds)
-    const timeoutId = setTimeout(() => {
-      console.log(`[${requestId}] Request timeout`);
-      window.removeEventListener('message', messageHandler);
-      
-      if (document.body.contains(iframe)) {
-        document.body.removeChild(iframe);
-      }
-      
-      // Fallback: ใช้ Local Storage
-      if (action === 'saveAllData' || action === 'exportToSheets') {
-        backupToLocalStorage(data);
-        resolve({
-          success: true,
-          message: 'Data saved to Local Storage (offline mode)',
-          action: action,
-          timestamp: new Date().toISOString()
-        });
       } else {
-        reject(new Error('Request timeout (30 seconds) - Using local data'));
-      }
-    }, 30000);
-    
-    // ตรวจสอบการโหลด iframe
-    iframe.onload = function() {
-      console.log(`[${requestId}] Iframe loaded successfully`);
-    };
-    
-    iframe.onerror = function() {
-      console.error(`[${requestId}] Iframe load error`);
-      window.removeEventListener('message', messageHandler);
-      clearTimeout(timeoutId);
-      
-      if (action === 'saveAllData' || action === 'exportToSheets') {
-        backupToLocalStorage(data);
-        resolve({
-          success: true,
-          message: 'Data saved to Local Storage (offline mode)',
-          action: action,
-          timestamp: new Date().toISOString()
-        });
-      } else {
-        reject(new Error('Iframe load failed - Using local data'));
+        reject(new Error(`HTTP ${xhr.status}: ${xhr.statusText}`));
       }
     };
+    
+    xhr.onerror = function() {
+      console.error(`[${requestId}] XHR error`);
+      reject(new Error('Network error'));
+    };
+    
+    xhr.ontimeout = function() {
+      console.error(`[${requestId}] XHR timeout`);
+      reject(new Error('Request timeout'));
+    };
+    
+    xhr.send();
   });
+}
+
+// ฟังก์ชันทดสอบการเชื่อมต่อแบบง่าย
+async function testSimpleConnection() {
+  try {
+    showLoading(true);
+    
+    // ทดสอบด้วยการเรียกใช้ doGet โดยตรง
+    const testUrl = GAS_URL + '?action=test&rnd=' + Date.now();
+    
+    const response = await fetch(testUrl);
+    const text = await response.text();
+    
+    console.log('Raw response:', text);
+    
+    // พยายามแยกข้อมูลจาก HTML
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(text, 'text/html');
+    const dataElement = doc.getElementById('data');
+    
+    if (dataElement) {
+      const data = JSON.parse(dataElement.textContent);
+      document.getElementById('message').innerHTML = 
+        `<div style="color:green;">
+          ✅ การเชื่อมต่อทำงานปกติ!<br>
+          <small>${data.message || 'เชื่อมต่อสำเร็จ'}</small>
+        </div>`;
+      return data;
+    } else {
+      throw new Error('Cannot parse response');
+    }
+  } catch (error) {
+    console.error('Connection test failed:', error);
+    document.getElementById('message').innerHTML = 
+      `<div style="color:red;">
+        ❌ การเชื่อมต่อล้มเหลว<br>
+        <small>${error.message}</small>
+      </div>`;
+    return null;
+  } finally {
+    showLoading(false);
+  }
 }
 
 // ฟังก์ชันโหลดข้อมูลทั้งหมดจาก Google Sheet
@@ -134,6 +147,13 @@ async function loadAllData() {
     showLoading(true);
     
     console.log('Starting to load data from Google Sheets...');
+    
+    // ทดสอบการเชื่อมต่อก่อน
+    const testResult = await testSimpleConnection();
+    if (!testResult || !testResult.success) {
+      throw new Error('Cannot connect to Google Sheets');
+    }
+    
     const data = await callGoogleAppsScript('getAllData');
     
     if (data && data.success) {
@@ -143,16 +163,9 @@ async function loadAllData() {
       rooms = data.rooms || [];
       lessons = data.lessons || [];
       
-      // บันทึกลง Local Storage เป็น backup
       backupToLocalStorage({ teachers, classes, subjects, rooms, lessons });
       
-      console.log('Successfully loaded from Google Sheets:', {
-        teachers: teachers.length,
-        classes: classes.length,
-        subjects: subjects.length,
-        rooms: rooms.length,
-        lessons: lessons.length
-      });
+      console.log('Successfully loaded from Google Sheets');
       
       document.getElementById('message').innerHTML = 
         `<div style="color:green;">
@@ -164,7 +177,15 @@ async function loadAllData() {
     }
   } catch (error) {
     console.error('Error loading data from Google Sheets:', error);
+    
+    // โหลดจาก Local Storage แทน
     loadFromLocalStorage();
+    
+    document.getElementById('message').innerHTML = 
+      `<div style="color:orange;">
+        📱 ใช้ข้อมูลจาก Local Storage (ออฟไลน์)<br>
+        <small>${error.message}</small>
+      </div>`;
   } finally {
     showLoading(false);
   }
@@ -361,178 +382,6 @@ async function importFromGoogleSheets() {
 }
 
 // =============================================
-// ฟังก์ชันทดสอบการเชื่อมต่อ
-// =============================================
-
-// ฟังก์ชันทดสอบการเชื่อมต่อ
-async function testConnection() {
-  try {
-    showLoading(true);
-    console.log('Testing connection to Google Apps Script...');
-    
-    const result = await callGoogleAppsScript('test');
-    
-    if (result && result.success) {
-      document.getElementById('message').innerHTML = 
-        `<div style="color:green;">
-          ✅ การเชื่อมต่อทำงานปกติ!<br>
-          📊 ชื่อไฟล์: ${result.spreadsheetName || 'N/A'}<br>
-          🔗 <a href="${result.spreadsheetUrl}" target="_blank" style="color:white;text-decoration:underline;">เปิด Google Sheets</a><br>
-          ⏰ ครั้งล่าสุด: ${new Date(result.timestamp).toLocaleString('th-TH')}<br>
-          <small>${result.message}</small>
-        </div>`;
-    } else {
-      document.getElementById('message').innerHTML = 
-        `<div style="color:red;">
-          ❌ การเชื่อมต่อล้มเหลว<br>
-          <small>${result?.error || 'Unknown error'}</small>
-        </div>`;
-    }
-  } catch (error) {
-    document.getElementById('message').innerHTML = 
-      `<div style="color:red;">
-        ❌ เกิดข้อผิดพลาดในการทดสอบ<br>
-        <small>${error.message}</small>
-      </div>`;
-  } finally {
-    showLoading(false);
-  }
-}
-
-// ฟังก์ชันดูข้อมูล Spreadsheet
-async function viewSpreadsheetInfo() {
-  try {
-    showLoading(true);
-    console.log('Getting spreadsheet info...');
-    
-    const result = await callGoogleAppsScript('info');
-    
-    if (result && result.success) {
-      let sheetsInfo = '';
-      result.sheets.forEach(sheet => {
-        const dataCount = sheet.dataCount > 0 ? ` (${sheet.dataCount} รายการ)` : '';
-        sheetsInfo += `• ${sheet.name}${dataCount}<br>`;
-      });
-      
-      document.getElementById('message').innerHTML = 
-        `<div style="color:green;">
-          📁 ข้อมูล Spreadsheet<br>
-          📊 ชื่อ: ${result.spreadsheetName}<br>
-          🔗 <a href="${result.spreadsheetUrl}" target="_blank" style="color:white;text-decoration:underline;">เปิด Google Sheets</a><br>
-          📋 จำนวน Sheets: ${result.totalSheets}<br>
-          📊 ข้อมูลทั้งหมด: ${result.totalData} รายการ<br>
-          📋 Sheets:<br>${sheetsInfo}
-          ⏰ ครั้งล่าสุด: ${new Date(result.timestamp).toLocaleString('th-TH')}
-        </div>`;
-    } else {
-      document.getElementById('message').innerHTML = 
-        `<div style="color:red;">
-          ❌ ไม่สามารถดึงข้อมูลได้<br>
-          <small>${result?.error || 'Unknown error'}</small>
-        </div>`;
-    }
-  } catch (error) {
-    document.getElementById('message').innerHTML = 
-      `<div style="color:red;">
-        ❌ เกิดข้อผิดพลาด<br>
-        <small>${error.message}</small>
-      </div>`;
-  } finally {
-    showLoading(false);
-  }
-}
-
-// =============================================
-// ฟังก์ชันจัดการ JSON
-// =============================================
-
-// ฟังก์ชันดาวน์โหลดข้อมูลเป็น JSON
-function downloadJSON() {
-  const data = {
-    teachers,
-    classes,
-    subjects,
-    rooms,
-    lessons,
-    exportDate: new Date().toISOString(),
-    version: '1.0',
-    stats: {
-      teachers: teachers.length,
-      classes: classes.length,
-      subjects: subjects.length,
-      rooms: rooms.length,
-      lessons: lessons.length
-    }
-  };
-  
-  const dataStr = JSON.stringify(data, null, 2);
-  const dataBlob = new Blob([dataStr], {type: 'application/json'});
-  
-  const url = URL.createObjectURL(dataBlob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `timetable_backup_${new Date().toISOString().split('T')[0]}.json`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-  
-  document.getElementById('message').innerHTML = 
-    `<div style="color:green;">
-      📥 ดาวน์โหลดไฟล์ JSON สำเร็จแล้ว<br>
-      <small>ครู: ${teachers.length} ท่าน | วิชา: ${subjects.length} รายการ | ตารางเรียน: ${lessons.length} คาบ</small>
-    </div>`;
-}
-
-// ฟังก์ชันนำเข้าข้อมูลจาก JSON
-async function importJSON(file) {
-  const reader = new FileReader();
-  
-  reader.onload = async function(e) {
-    try {
-      const data = JSON.parse(e.target.result);
-      
-      if (!data.teachers || !data.classes || !data.subjects || !data.rooms || !data.lessons) {
-        throw new Error('รูปแบบไฟล์ไม่ถูกต้อง - ไฟล์ต้องมีข้อมูลครู, ชั้นเรียน, วิชา, ห้อง, และตารางเรียน');
-      }
-      
-      if (!confirm(`การนำเข้าข้อมูลจะทับข้อมูลปัจจุบันทั้งหมด\n\nข้อมูลที่จะนำเข้า:\n• ครู: ${data.teachers.length} ท่าน\n• ชั้นเรียน: ${data.classes.length} ห้อง\n• วิชา: ${data.subjects.length} รายการ\n• ห้อง: ${data.rooms.length} ห้อง\n• ตารางเรียน: ${data.lessons.length} คาบ\n\nต้องการดำเนินการต่อหรือไม่?`)) {
-        return;
-      }
-      
-      teachers = data.teachers;
-      classes = data.classes;
-      subjects = data.subjects;
-      rooms = data.rooms;
-      lessons = data.lessons;
-      
-      // บันทึกลง Google Sheet
-      const saved = await saveAllData();
-      
-      if (saved) {
-        loadDropdowns();
-        renderAll();
-        document.getElementById('message').innerHTML = 
-          `<div style="color:green;">
-            📤 นำเข้าข้อมูลจาก JSON และบันทึกลง Google Sheet สำเร็จแล้ว<br>
-            <small>ครู: ${teachers.length} ท่าน | วิชา: ${subjects.length} รายการ | ตารางเรียน: ${lessons.length} คาบ</small>
-          </div>`;
-      }
-      
-    } catch (error) {
-      console.error('Error importing JSON:', error);
-      document.getElementById('message').innerHTML = 
-        `<div style="color:red;">
-          ❌ เกิดข้อผิดพลาดในการนำเข้า<br>
-          <small>${error.message}</small>
-        </div>`;
-    }
-  };
-  
-  reader.readAsText(file);
-}
-
-// =============================================
 // ฟังก์ชันจัดการระบบล็อกอิน
 // =============================================
 
@@ -541,45 +390,6 @@ function showLoading(show) {
   const loadingElement = document.getElementById('loading');
   if (loadingElement) {
     loadingElement.style.display = show ? 'flex' : 'none';
-  }
-}
-
-// สร้าง element loading
-function createLoadingElement() {
-  if (!document.getElementById('loading')) {
-    const loadingDiv = document.createElement('div');
-    loadingDiv.id = 'loading';
-    loadingDiv.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.7);
-      display: none;
-      justify-content: center;
-      align-items: center;
-      z-index: 9999;
-      color: white;
-      font-size: 18px;
-      flex-direction: column;
-    `;
-    loadingDiv.innerHTML = `
-      <div style="background: white; padding: 30px; border-radius: 10px; color: black; display: flex; align-items: center; gap: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
-        <div class="loading-spinner" style="border: 4px solid #f3f3f3; border-top: 4px solid #10b981; border-radius: 50%; width: 40px; height: 40px; animation: spin 2s linear infinite;"></div>
-        <div>
-          <div style="font-weight: bold; margin-bottom: 5px;">🔄 กำลังโหลดข้อมูล...</div>
-          <div style="font-size: 14px; color: #666;">กรุณารอสักครู่</div>
-        </div>
-      </div>
-      <style>
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      </style>
-    `;
-    document.body.appendChild(loadingDiv);
   }
 }
 
@@ -642,6 +452,7 @@ function toggleEditFunctions(show) {
   
   document.getElementById('autoBtn').style.display = show ? 'inline-block' : 'none';
   document.getElementById('resetBtn').style.display = show ? 'inline-block' : 'none';
+  document.getElementById('testConnectionBtn').style.display = show ? 'inline-block' : 'none';
 }
 
 // ฟังก์ชันล็อกอิน
@@ -1812,6 +1623,96 @@ document.getElementById('teacherSummarySelect').addEventListener('change', rende
 // Event listener สำหรับ dropdown สรุปชั้นปี
 document.getElementById('classSummarySelect').addEventListener('change', renderClassSummary);
 
+// =============================================
+// ฟังก์ชันจัดการ JSON
+// =============================================
+
+// ฟังก์ชันดาวน์โหลดข้อมูลเป็น JSON
+function downloadJSON() {
+  const data = {
+    teachers,
+    classes,
+    subjects,
+    rooms,
+    lessons,
+    exportDate: new Date().toISOString(),
+    version: '1.0',
+    stats: {
+      teachers: teachers.length,
+      classes: classes.length,
+      subjects: subjects.length,
+      rooms: rooms.length,
+      lessons: lessons.length
+    }
+  };
+  
+  const dataStr = JSON.stringify(data, null, 2);
+  const dataBlob = new Blob([dataStr], {type: 'application/json'});
+  
+  const url = URL.createObjectURL(dataBlob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `timetable_backup_${new Date().toISOString().split('T')[0]}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  
+  document.getElementById('message').innerHTML = 
+    `<div style="color:green;">
+      📥 ดาวน์โหลดไฟล์ JSON สำเร็จแล้ว<br>
+      <small>ครู: ${teachers.length} ท่าน | วิชา: ${subjects.length} รายการ | ตารางเรียน: ${lessons.length} คาบ</small>
+    </div>`;
+}
+
+// ฟังก์ชันนำเข้าข้อมูลจาก JSON
+async function importJSON(file) {
+  const reader = new FileReader();
+  
+  reader.onload = async function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      
+      if (!data.teachers || !data.classes || !data.subjects || !data.rooms || !data.lessons) {
+        throw new Error('รูปแบบไฟล์ไม่ถูกต้อง - ไฟล์ต้องมีข้อมูลครู, ชั้นเรียน, วิชา, ห้อง, และตารางเรียน');
+      }
+      
+      if (!confirm(`การนำเข้าข้อมูลจะทับข้อมูลปัจจุบันทั้งหมด\n\nข้อมูลที่จะนำเข้า:\n• ครู: ${data.teachers.length} ท่าน\n• ชั้นเรียน: ${data.classes.length} ห้อง\n• วิชา: ${data.subjects.length} รายการ\n• ห้อง: ${data.rooms.length} ห้อง\n• ตารางเรียน: ${data.lessons.length} คาบ\n\nต้องการดำเนินการต่อหรือไม่?`)) {
+        return;
+      }
+      
+      teachers = data.teachers;
+      classes = data.classes;
+      subjects = data.subjects;
+      rooms = data.rooms;
+      lessons = data.lessons;
+      
+      // บันทึกลง Google Sheet
+      const saved = await saveAllData();
+      
+      if (saved) {
+        loadDropdowns();
+        renderAll();
+        document.getElementById('message').innerHTML = 
+          `<div style="color:green;">
+            📤 นำเข้าข้อมูลจาก JSON และบันทึกลง Google Sheet สำเร็จแล้ว<br>
+            <small>ครู: ${teachers.length} ท่าน | วิชา: ${subjects.length} รายการ | ตารางเรียน: ${lessons.length} คาบ</small>
+          </div>`;
+      }
+      
+    } catch (error) {
+      console.error('Error importing JSON:', error);
+      document.getElementById('message').innerHTML = 
+        `<div style="color:red;">
+          ❌ เกิดข้อผิดพลาดในการนำเข้า<br>
+          <small>${error.message}</small>
+        </div>`;
+    }
+  };
+  
+  reader.readAsText(file);
+}
+
 // Event Listeners สำหรับปุ่ม JSON และ Google Sheets
 document.getElementById('downloadJsonBtn').onclick = downloadJSON;
 
@@ -1829,11 +1730,11 @@ document.getElementById('jsonFileInput').onchange = function (e) {
 
 document.getElementById('exportToSheetsBtn').onclick = exportToGoogleSheets;
 document.getElementById('importFromSheetsBtn').onclick = importFromGoogleSheets;
+document.getElementById('testConnectionBtn').onclick = testSimpleConnection;
 
 // เมื่อโหลดหน้าเว็บเสร็จ
 window.addEventListener('DOMContentLoaded', function () {
   console.log('🚀 กำลังเริ่มต้นระบบจัดการตารางเรียน...');
-  createLoadingElement();
   showLoginModal();
 
   document.getElementById('loginBtn').onclick = loginAsAdmin;
