@@ -1,8 +1,8 @@
 const periods = ["คาบ 1 (08:30-09:20)", "คาบ 2 (09:20-10:10)", "คาบ 3 (10:20-11:10)", "คาบ 4 (11:10-12:00)", "พักกลางวัน", "คาบ 5 (12:50-13:40)", "คาบ 6 (13:40-14:30)", "คาบ 7 (14:30-15:20)"];
 const days = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร️"];
 
-// URL ของ Google Apps Script - เปลี่ยนเป็น URL ของคุณหลังจาก Deploy
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbwl7NPnWlng4EfAcjn-mXD79e-h6_ELFszuhiX0ISHEB0Wfr8Q4X1q65PevfFZe9P5pWQ/exec';
+// URL ของ Google Apps Script
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzxxpADonGvH4hRCG4i7szaqbIDFyoFYSFVXoroyJYrw2CnftaaFB3qekhw9P69qbckwA/exec';
 
 let lessons = [];
 let teachers = [];
@@ -30,114 +30,270 @@ let currentFilters = {
 let isAdminMode = false;
 const ADMIN_PASSWORD = "admin452026";
 
+// เพิ่มตัวแปรสำหรับจัดการข้อมูลจำนวนมาก
+const BATCH_SIZE = 100;
+let currentBatch = 0;
+let allDataLoaded = false;
+
 // =============================================
-// ฟังก์ชันจัดการ Google Apps Script (แก้ไขใหม่)
+// ฟังก์ชันจัดการ Google Apps Script
 // =============================================
 
-// ฟังก์ชันเรียกใช้งาน Google Apps Script แบบใหม่
+// ฟังก์ชันเรียกใช้งาน Google Apps Script แบบ POST สำหรับข้อมูลขนาดใหญ่
+async function callGoogleAppsScriptPost(action, data = {}) {
+  try {
+    const payload = {
+      action: action,
+      data: data
+    };
+    
+    const response = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    return result;
+    
+  } catch (error) {
+    console.error('POST request failed, falling back to JSONP:', error);
+    return await callGoogleAppsScript(action, data);
+  }
+}
+
+// ฟังก์ชันเรียกใช้งาน Google Apps Script
 async function callGoogleAppsScript(action, data = {}) {
+  // ตรวจสอบขนาดข้อมูล
+  const dataSize = JSON.stringify(data).length;
+  
+  // ถ้าข้อมูลใหญ่กว่า 10KB ให้ใช้ POST
+  if (dataSize > 10000) {
+    console.log(`Data too large for JSONP (${dataSize} bytes), using POST`);
+    return await callGoogleAppsScriptPost(action, data);
+  }
+  
   return new Promise((resolve, reject) => {
-    const requestId = 'req_' + Date.now();
-    console.log(`[${requestId}] Calling GAS:`, action);
+    const callbackName = 'gas_callback_' + Math.round(100000 * Math.random());
     
-    // ใช้ XMLHttpRequest แทน iframe
-    const xhr = new XMLHttpRequest();
-    const params = new URLSearchParams();
-    params.append('action', action);
-    params.append('data', JSON.stringify(data));
-    params.append('rnd', Date.now());
-    
-    const url = GAS_URL + '?' + params.toString();
-    
-    xhr.open('GET', url, true);
-    xhr.timeout = 30000;
-    
-    xhr.onload = function() {
-      console.log(`[${requestId}] XHR loaded, status: ${xhr.status}`);
+    window[callbackName] = function(response) {
+      delete window[callbackName];
+      if (script.parentNode) {
+        document.body.removeChild(script);
+      }
+      clearTimeout(timeoutId);
       
-      if (xhr.status === 200) {
-        try {
-          // พยายามแยกข้อมูลจาก HTML response
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(xhr.responseText, 'text/html');
-          const dataElement = doc.getElementById('data');
-          
-          if (dataElement) {
-            const dataText = dataElement.textContent;
-            const result = JSON.parse(dataText);
-            resolve(result);
-          } else {
-            // Fallback: ลองหา JSON ใน response
-            const jsonMatch = xhr.responseText.match(/<script[^>]*>.*?({.*?}).*?<\/script>/);
-            if (jsonMatch) {
-              const result = JSON.parse(jsonMatch[1]);
-              resolve(result);
-            } else {
-              throw new Error('Cannot parse response');
-            }
-          }
-        } catch (error) {
-          console.error('Parse error:', error);
-          reject(new Error('Failed to parse response: ' + error.message));
-        }
+      if (response && response.success === false && response.error && response.error.includes('Data too large')) {
+        // ถ้า JSONP ล้มเหลวเพราะข้อมูลใหญ่เกินไป ให้ลองใช้ POST
+        console.log('JSONP failed due to large data, trying POST...');
+        callGoogleAppsScriptPost(action, data).then(resolve).catch(reject);
       } else {
-        reject(new Error(`HTTP ${xhr.status}: ${xhr.statusText}`));
+        resolve(response);
       }
     };
     
-    xhr.onerror = function() {
-      console.error(`[${requestId}] XHR error`);
-      reject(new Error('Network error'));
+    const script = document.createElement('script');
+    const params = new URLSearchParams();
+    params.append('action', action);
+    
+    // จำกัดขนาดข้อมูลสำหรับ JSONP
+    if (dataSize <= 10000) {
+      params.append('data', JSON.stringify(data));
+    }
+    
+    params.append('callback', callbackName);
+    params.append('rnd', Date.now());
+    
+    script.src = GAS_URL + '?' + params.toString();
+    
+    script.onerror = () => {
+      delete window[callbackName];
+      if (script.parentNode) {
+        document.body.removeChild(script);
+      }
+      clearTimeout(timeoutId);
+      
+      // ถ้า JSONP ล้มเหลว ให้ลองใช้ POST
+      console.log('JSONP failed, trying POST...');
+      callGoogleAppsScriptPost(action, data).then(resolve).catch(reject);
     };
     
-    xhr.ontimeout = function() {
-      console.error(`[${requestId}] XHR timeout`);
-      reject(new Error('Request timeout'));
-    };
+    document.body.appendChild(script);
     
-    xhr.send();
+    const timeoutId = setTimeout(() => {
+      if (window[callbackName]) {
+        delete window[callbackName];
+        if (script.parentNode) {
+          document.body.removeChild(script);
+        }
+        reject(new Error('JSONP request timeout (20 seconds)'));
+      }
+    }, 20000);
   });
 }
 
-// ฟังก์ชันทดสอบการเชื่อมต่อแบบง่าย
+// ฟังก์ชันทดสอบการเชื่อมต่อ
 async function testSimpleConnection() {
   try {
     showLoading(true);
     
-    // ทดสอบด้วยการเรียกใช้ doGet โดยตรง
-    const testUrl = GAS_URL + '?action=test&rnd=' + Date.now();
+    console.log('Testing connection to Google Apps Script...');
     
-    const response = await fetch(testUrl);
-    const text = await response.text();
+    const result = await callGoogleAppsScript('ping');
     
-    console.log('Raw response:', text);
-    
-    // พยายามแยกข้อมูลจาก HTML
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(text, 'text/html');
-    const dataElement = doc.getElementById('data');
-    
-    if (dataElement) {
-      const data = JSON.parse(dataElement.textContent);
+    if (result && result.success) {
       document.getElementById('message').innerHTML = 
         `<div style="color:green;">
           ✅ การเชื่อมต่อทำงานปกติ!<br>
-          <small>${data.message || 'เชื่อมต่อสำเร็จ'}</small>
+          <small>${result.message || 'เชื่อมต่อสำเร็จ'}</small>
         </div>`;
-      return data;
+      return result;
     } else {
-      throw new Error('Cannot parse response');
+      throw new Error(result?.error || 'Failed to connect');
     }
   } catch (error) {
     console.error('Connection test failed:', error);
-    document.getElementById('message').innerHTML = 
-      `<div style="color:red;">
+    
+    const errorHtml = `
+      <div style="color:red;">
         ❌ การเชื่อมต่อล้มเหลว<br>
         <small>${error.message}</small>
-      </div>`;
+        <br><br>
+        <strong>วิธีแก้ไข:</strong><br>
+        1. <a href="${GAS_URL}?action=test" target="_blank" style="color:white;text-decoration:underline;">เปิด Google Apps Script โดยตรง</a><br>
+        2. อนุญาตการเข้าถึงถ้ายังไม่เคยทำ<br>
+        3. รีเฟรชหน้านี้ใหม่<br>
+        4. หรือใช้โหมดออฟไลน์ (ข้อมูลจะถูกบันทึกในเบราว์เซอร์)
+      </div>
+    `;
+    
+    document.getElementById('message').innerHTML = errorHtml;
     return null;
   } finally {
     showLoading(false);
+  }
+}
+
+// ฟังก์ชันตรวจสอบและซ่อมแซมข้อมูล
+function validateAndRepairData() {
+  console.log('กำลังตรวจสอบและซ่อมแซมข้อมูล...');
+  
+  if (!teachers || !Array.isArray(teachers)) {
+    console.warn('Teachers array is invalid, resetting...');
+    teachers = [];
+  } else {
+    teachers = teachers.filter(teacher => 
+      teacher && typeof teacher === 'string' && teacher.trim() !== ''
+    ).map(teacher => teacher.trim());
+  }
+  
+  if (!classes || !Array.isArray(classes)) {
+    console.warn('Classes array is invalid, resetting...');
+    classes = [];
+  } else {
+    classes = classes.filter(cls => 
+      cls && typeof cls === 'string' && cls.trim() !== ''
+    ).map(cls => cls.trim());
+  }
+  
+  if (!subjects || !Array.isArray(subjects)) {
+    console.warn('Subjects array is invalid, resetting...');
+    subjects = [];
+  } else {
+    subjects = subjects.filter(subject => 
+      subject && typeof subject === 'string' && subject.trim() !== ''
+    ).map(subject => subject.trim());
+  }
+  
+  if (!rooms || !Array.isArray(rooms)) {
+    console.warn('Rooms array is invalid, resetting...');
+    rooms = [];
+  } else {
+    rooms = rooms.filter(room => 
+      room && typeof room === 'string' && room.trim() !== ''
+    ).map(room => room.trim());
+  }
+  
+  if (!lessons || !Array.isArray(lessons)) {
+    console.warn('Lessons array is invalid, resetting...');
+    lessons = [];
+  } else {
+    lessons = lessons.filter(lesson => {
+      if (!lesson || typeof lesson !== 'object') return false;
+      
+      lesson.id = lesson.id || uid();
+      lesson.teacher = lesson.teacher || '';
+      lesson.subject = lesson.subject || '';
+      lesson.classLevel = lesson.classLevel || '';
+      lesson.room = lesson.room || '';
+      lesson.day = typeof lesson.day === 'number' ? lesson.day : parseInt(lesson.day) || 0;
+      lesson.period = typeof lesson.period === 'number' ? lesson.period : parseInt(lesson.period) || 0;
+      
+      return lesson.teacher && lesson.subject;
+    });
+  }
+  
+  console.log('ตรวจสอบและซ่อมแซมข้อมูลสำเร็จ:', {
+    teachers: teachers.length,
+    classes: classes.length,
+    subjects: subjects.length,
+    rooms: rooms.length,
+    lessons: lessons.length
+  });
+}
+
+// ฟังก์ชันโหลดจาก Local Storage
+function loadFromLocalStorage() {
+  console.log('Loading data from Local Storage...');
+  
+  try {
+    teachers = JSON.parse(localStorage.getItem('teachers')) || [];
+    classes = JSON.parse(localStorage.getItem('classes')) || [];
+    subjects = JSON.parse(localStorage.getItem('subjects')) || [];
+    rooms = JSON.parse(localStorage.getItem('rooms')) || [];
+    lessons = JSON.parse(localStorage.getItem('lessons')) || [];
+    
+    validateAndRepairData();
+    
+    if (teachers.length === 0 && classes.length === 0 && subjects.length === 0 && rooms.length === 0) {
+      console.log('No data found, using sample data...');
+      teachers = ['ครูสมชาย', 'ครูสมหญิง', 'ครูนิดา'];
+      classes = ['ปวช.1/1', 'ปวช.1/2', 'ปวช.2/1'];
+      subjects = ['คณิตศาสตร์', 'วิทยาศาสตร์', 'ภาษาอังกฤษ'];
+      rooms = ['ห้อง 101', 'ห้อง 102', 'ห้อง Lab 1'];
+      lessons = [];
+      
+      backupToLocalStorage({ teachers, classes, subjects, rooms, lessons });
+    }
+    
+    const totalLessons = lessons.length;
+    document.getElementById('message').innerHTML = 
+      `<div style="color:orange;">
+        📱 ใช้ข้อมูลจาก Local Storage<br>
+        <small>ครู: ${teachers.length} ท่าน | วิชา: ${subjects.length} รายการ | ตารางเรียน: ${totalLessons} คาบ</small>
+      </div>`;
+      
+  } catch (error) {
+    console.error('Error loading from Local Storage:', error);
+    teachers = ['ครูสมชาย', 'ครูสมหญิง', 'ครูนิดา'];
+    classes = ['ปวช.1/1', 'ปวช.1/2', 'ปวช.2/1'];
+    subjects = ['คณิตศาสตร์', 'วิทยาศาสตร์', 'ภาษาอังกฤษ'];
+    rooms = ['ห้อง 101', 'ห้อง 102', 'ห้อง Lab 1'];
+    lessons = [];
+    
+    backupToLocalStorage({ teachers, classes, subjects, rooms, lessons });
+    
+    document.getElementById('message').innerHTML = 
+      `<div style="color:red;">
+        ❌ เกิดข้อผิดพลาดในการโหลดข้อมูล Local Storage<br>
+        <small>ใช้ข้อมูลตัวอย่างแทน</small>
+      </div>`;
   }
 }
 
@@ -148,7 +304,6 @@ async function loadAllData() {
     
     console.log('Starting to load data from Google Sheets...');
     
-    // ทดสอบการเชื่อมต่อก่อน
     const testResult = await testSimpleConnection();
     if (!testResult || !testResult.success) {
       throw new Error('Cannot connect to Google Sheets');
@@ -163,62 +318,42 @@ async function loadAllData() {
       rooms = data.rooms || [];
       lessons = data.lessons || [];
       
+      validateAndRepairData();
       backupToLocalStorage({ teachers, classes, subjects, rooms, lessons });
       
       console.log('Successfully loaded from Google Sheets');
+      
+      // แสดงสถิติข้อมูล
+      const statsHtml = showDataStatistics();
       
       document.getElementById('message').innerHTML = 
         `<div style="color:green;">
           ✅ โหลดข้อมูลจาก Google Sheets สำเร็จ<br>
           <small>ครู: ${teachers.length} ท่าน | วิชา: ${subjects.length} รายการ | ตารางเรียน: ${lessons.length} คาบ</small>
-        </div>`;
+        </div>
+        ${statsHtml}`;
     } else {
       throw new Error(data?.error || 'Failed to load data from server');
     }
   } catch (error) {
     console.error('Error loading data from Google Sheets:', error);
     
-    // โหลดจาก Local Storage แทน
     loadFromLocalStorage();
+    
+    // แสดงสถิติข้อมูลแม้ในโหมดออฟไลน์
+    const statsHtml = showDataStatistics();
     
     document.getElementById('message').innerHTML = 
       `<div style="color:orange;">
         📱 ใช้ข้อมูลจาก Local Storage (ออฟไลน์)<br>
         <small>${error.message}</small>
-      </div>`;
+        <br>
+        <a href="${GAS_URL}?action=test" target="_blank" style="color:blue;text-decoration:underline;">คลิกที่นี่เพื่อตั้งค่า Google Apps Script</a>
+      </div>
+      ${statsHtml}`;
   } finally {
     showLoading(false);
   }
-}
-
-// ฟังก์ชันโหลดจาก Local Storage
-function loadFromLocalStorage() {
-  console.log('Loading data from Local Storage...');
-  
-  teachers = JSON.parse(localStorage.getItem('teachers')) || [];
-  classes = JSON.parse(localStorage.getItem('classes')) || [];
-  subjects = JSON.parse(localStorage.getItem('subjects')) || [];
-  rooms = JSON.parse(localStorage.getItem('rooms')) || [];
-  lessons = JSON.parse(localStorage.getItem('lessons')) || [];
-  
-  // ถ้าไม่มีข้อมูลใน Local Storage ให้ใช้ข้อมูลตัวอย่าง
-  if (teachers.length === 0 && classes.length === 0 && subjects.length === 0 && rooms.length === 0) {
-    console.log('No data found, using sample data...');
-    teachers = ['ครูสมชาย', 'ครูสมหญิง', 'ครูนิดา'];
-    classes = ['ปวช.1/1', 'ปวช.1/2', 'ปวช.2/1'];
-    subjects = ['คณิตศาสตร์', 'วิทยาศาสตร์', 'ภาษาอังกฤษ'];
-    rooms = ['ห้อง 101', 'ห้อง 102', 'ห้อง Lab 1'];
-    lessons = [];
-    
-    backupToLocalStorage({ teachers, classes, subjects, rooms, lessons });
-  }
-  
-  const totalLessons = lessons.length;
-  document.getElementById('message').innerHTML = 
-    `<div style="color:orange;">
-      📱 ใช้ข้อมูลจาก Local Storage<br>
-      <small>ครู: ${teachers.length} ท่าน | วิชา: ${subjects.length} รายการ | ตารางเรียน: ${totalLessons} คาบ</small>
-    </div>`;
 }
 
 // ฟังก์ชันบันทึกข้อมูลทั้งหมดไปยัง Google Sheet
@@ -227,47 +362,77 @@ async function saveAllData() {
     showLoading(true);
     
     const dataToSave = {
-      teachers: teachers,
-      classes: classes,
-      subjects: subjects,
-      rooms: rooms,
-      lessons: lessons
+      teachers: teachers || [],
+      classes: classes || [],
+      subjects: subjects || [],
+      rooms: rooms || [],
+      lessons: lessons || []
     };
     
+    const dataSize = JSON.stringify(dataToSave).length;
     console.log('Saving data to Google Sheets...', {
-      teachers: teachers.length,
-      classes: classes.length,
-      subjects: subjects.length,
-      rooms: rooms.length,
-      lessons: lessons.length
+      teachers: dataToSave.teachers.length,
+      classes: dataToSave.classes.length,
+      subjects: dataToSave.subjects.length,
+      rooms: dataToSave.rooms.length,
+      lessons: dataToSave.lessons.length,
+      totalSize: dataSize + ' bytes'
     });
     
-    const result = await callGoogleAppsScript('saveAllData', dataToSave);
+    if (dataToSave.teachers.length === 0 && 
+        dataToSave.classes.length === 0 && 
+        dataToSave.subjects.length === 0 && 
+        dataToSave.rooms.length === 0 && 
+        dataToSave.lessons.length === 0) {
+      throw new Error('ไม่มีข้อมูลที่จะบันทึก');
+    }
+    
+    // ใช้ saveLargeData สำหรับข้อมูลจำนวนมาก
+    const action = dataSize > 50000 ? 'saveLargeData' : 'saveAllData';
+    console.log(`Using action: ${action} for data size: ${dataSize} bytes`);
+    
+    const result = await callGoogleAppsScript(action, dataToSave);
     
     if (result && result.success) {
-      // บันทึกลง Local Storage ด้วย
       backupToLocalStorage(dataToSave);
       
       console.log('Successfully saved to Google Sheets');
       document.getElementById('message').innerHTML = 
         `<div style="color:green;">
           ✅ บันทึกข้อมูลลง Google Sheets สำเร็จ<br>
-          <small>${result.message}</small>
+          <small>${result.message || 'บันทึกข้อมูลเรียบร้อย'}</small>
+          ${result.stats ? `<br><small>ครู: ${result.stats.teachers || 0} | วิชา: ${result.stats.subjects || 0} | ตารางเรียน: ${result.stats.lessons || 0}</small>` : ''}
         </div>`;
       return true;
     } else {
-      throw new Error(result?.error || 'Failed to save data');
+      throw new Error(result?.error || 'Failed to save data to Google Sheets');
     }
   } catch (error) {
     console.error('Error saving data to Google Sheets:', error);
     
-    // ถ้าไม่สามารถบันทึกไปยัง Google Sheet ได้ ให้บันทึกลง Local Storage แค่เดียว
-    backupToLocalStorage({ teachers, classes, subjects, rooms, lessons });
+    // บันทึกลง Local Storage เป็น fallback
+    backupToLocalStorage({ 
+      teachers: teachers || [], 
+      classes: classes || [], 
+      subjects: subjects || [], 
+      rooms: rooms || [], 
+      lessons: lessons || [] 
+    });
     
     document.getElementById('message').innerHTML = 
       `<div style="color:orange;">
-        📱 บันทึกข้อมูลลง Local Storage<br>
+        📱 บันทึกข้อมูลลง Local Storage (ทำงานในโหมดออฟไลน์)<br>
         <small>${error.message}</small>
+        <br><br>
+        <strong>สาเหตุที่อาจเกิดขึ้น:</strong><br>
+        • ข้อมูลมีขนาดใหญ่เกินไปสำหรับการส่งผ่าน JSONP<br>
+        • การเชื่อมต่ออินเทอร์เน็ตมีปัญหา<br>
+        • Google Apps Script เกินโควต้า<br>
+        <br>
+        <strong>คำแนะนำ:</strong><br>
+        • ข้อมูลถูกบันทึกในเบราว์เซอร์แล้ว<br>
+        • สามารถส่งข้อมูลไป Google Sheets ได้ภายหลังโดยแบ่งข้อมูลเป็นชุดเล็กๆ<br>
+        • หรือใช้ปุ่ม "ส่งข้อมูลไป Google Sheets" เมื่อการเชื่อมต่อดีขึ้น
       </div>`;
     return false;
   } finally {
@@ -354,7 +519,7 @@ async function importFromGoogleSheets() {
       rooms = result.rooms || [];
       lessons = result.lessons || [];
       
-      // บันทึกลง Local Storage
+      validateAndRepairData();
       backupToLocalStorage({ teachers, classes, subjects, rooms, lessons });
       
       loadDropdowns();
@@ -445,7 +610,7 @@ function toggleEditFunctions(show) {
     section.style.display = show ? 'block' : 'none';
   });
   
-  const jsonButtons = document.querySelectorAll('#downloadJsonBtn, #importJsonBtn, #exportToSheetsBtn, #importFromSheetsBtn');
+  const jsonButtons = document.querySelectorAll('#downloadJsonBtn, #importJsonBtn, #exportToSheetsBtn, #importFromSheetsBtn, #exportToSheetsChunkBtn');
   jsonButtons.forEach(button => {
     button.style.display = show ? 'inline-block' : 'none';
   });
@@ -453,6 +618,8 @@ function toggleEditFunctions(show) {
   document.getElementById('autoBtn').style.display = show ? 'inline-block' : 'none';
   document.getElementById('resetBtn').style.display = show ? 'inline-block' : 'none';
   document.getElementById('testConnectionBtn').style.display = show ? 'inline-block' : 'none';
+  document.getElementById('clearDataBtn').style.display = show ? 'inline-block' : 'none';
+  document.getElementById('debugBtn').style.display = show ? 'inline-block' : 'none';
 }
 
 // ฟังก์ชันล็อกอิน
@@ -465,7 +632,6 @@ function loginAsAdmin() {
     setUserMode(true);
     messageDiv.innerHTML = '';
     
-    // โหลดข้อมูลใหม่เมื่อล็อกอินสำเร็จ
     loadAllData().then(() => {
       loadDropdowns();
       renderAll();
@@ -480,7 +646,6 @@ function loginAsGuest() {
   hideLoginModal();
   setUserMode(false);
   
-  // โหลดข้อมูลเมื่อเข้าสู่ระบบเป็นผู้เยี่ยมชม
   loadAllData().then(() => {
     loadDropdowns();
     renderAll();
@@ -514,25 +679,48 @@ function loadDropdowns() {
   const subjectSelect = document.getElementById('subject');
   const roomSelect = document.getElementById('room');
   
+  // จำกัดจำนวนตัวเลือกใน dropdown เพื่อประสิทธิภาพ
+  const dropdownLimit = 500;
+  
   teacherSelect.innerHTML = '<option value="">เลือกอาจารย์</option>';
-  teachers.forEach(teacher => {
+  const teachersToShow = teachers.length > dropdownLimit ? 
+    teachers.slice(0, dropdownLimit) : teachers;
+  teachersToShow.forEach(teacher => {
     teacherSelect.innerHTML += `<option value="${teacher}">${teacher}</option>`;
   });
+  if (teachers.length > dropdownLimit) {
+    teacherSelect.innerHTML += `<option value="" disabled>... และอีก ${teachers.length - dropdownLimit} รายการ</option>`;
+  }
   
   classSelect.innerHTML = '<option value="">เลือกชั้นเรียน</option>';
-  classes.forEach(cls => {
+  const classesToShow = classes.length > dropdownLimit ? 
+    classes.slice(0, dropdownLimit) : classes;
+  classesToShow.forEach(cls => {
     classSelect.innerHTML += `<option value="${cls}">${cls}</option>`;
   });
+  if (classes.length > dropdownLimit) {
+    classSelect.innerHTML += `<option value="" disabled>... และอีก ${classes.length - dropdownLimit} รายการ</option>`;
+  }
   
   subjectSelect.innerHTML = '<option value="">เลือกรายวิชา</option>';
-  subjects.forEach(subject => {
+  const subjectsToShow = subjects.length > dropdownLimit ? 
+    subjects.slice(0, dropdownLimit) : subjects;
+  subjectsToShow.forEach(subject => {
     subjectSelect.innerHTML += `<option value="${subject}">${subject}</option>`;
   });
+  if (subjects.length > dropdownLimit) {
+    subjectSelect.innerHTML += `<option value="" disabled>... และอีก ${subjects.length - dropdownLimit} รายการ</option>`;
+  }
   
   roomSelect.innerHTML = '<option value="">เลือกห้อง</option>';
-  rooms.forEach(room => {
+  const roomsToShow = rooms.length > dropdownLimit ? 
+    rooms.slice(0, dropdownLimit) : rooms;
+  roomsToShow.forEach(room => {
     roomSelect.innerHTML += `<option value="${room}">${room}</option>`;
   });
+  if (rooms.length > dropdownLimit) {
+    roomSelect.innerHTML += `<option value="" disabled>... และอีก ${rooms.length - dropdownLimit} รายการ</option>`;
+  }
   
   renderDataLists();
   loadTeacherSummaryDropdown();
@@ -544,101 +732,179 @@ function loadTeacherSummaryDropdown() {
   const teacherSummarySelect = document.getElementById('teacherSummarySelect');
   teacherSummarySelect.innerHTML = '<option value="all">แสดงทั้งหมด</option>';
   
-  teachers.forEach(teacher => {
+  // จำกัดจำนวนตัวเลือกใน dropdown สรุป
+  const summaryLimit = 200;
+  const teachersToShow = teachers.length > summaryLimit ? 
+    teachers.slice(0, summaryLimit) : teachers;
+  
+  teachersToShow.forEach(teacher => {
     teacherSummarySelect.innerHTML += `<option value="${teacher}">${teacher}</option>`;
   });
+  if (teachers.length > summaryLimit) {
+    teacherSummarySelect.innerHTML += `<option value="" disabled>... และอีก ${teachers.length - summaryLimit} รายการ</option>`;
+  }
 }
 
 // ฟังก์ชันโหลดตัวเลือกใน dropdown กรอง
 function loadFilterOptions() {
   const filterSubject = document.getElementById('filterSubject');
   filterSubject.innerHTML = '<option value="">ทั้งหมด</option>';
-  subjects.forEach(subject => {
+  // จำกัดจำนวนตัวเลือกในฟิลเตอร์
+  const filterLimit = 200;
+  const subjectsToShow = subjects.length > filterLimit ? 
+    subjects.slice(0, filterLimit) : subjects;
+  subjectsToShow.forEach(subject => {
     filterSubject.innerHTML += `<option value="${subject}">${subject}</option>`;
   });
+  if (subjects.length > filterLimit) {
+    filterSubject.innerHTML += `<option value="" disabled>... และอีก ${subjects.length - filterLimit} รายการ</option>`;
+  }
   
   const filterTeacher = document.getElementById('filterTeacher');
   filterTeacher.innerHTML = '<option value="">ทั้งหมด</option>';
-  teachers.forEach(teacher => {
+  const teachersToShow = teachers.length > filterLimit ? 
+    teachers.slice(0, filterLimit) : teachers;
+  teachersToShow.forEach(teacher => {
     filterTeacher.innerHTML += `<option value="${teacher}">${teacher}</option>`;
   });
+  if (teachers.length > filterLimit) {
+    filterTeacher.innerHTML += `<option value="" disabled>... และอีก ${teachers.length - filterLimit} รายการ</option>`;
+  }
   
   const filterClass = document.getElementById('filterClass');
   filterClass.innerHTML = '<option value="">ทั้งหมด</option>';
-  classes.forEach(cls => {
+  const classesToShow = classes.length > filterLimit ? 
+    classes.slice(0, filterLimit) : classes;
+  classesToShow.forEach(cls => {
     filterClass.innerHTML += `<option value="${cls}">${cls}</option>`;
   });
+  if (classes.length > filterLimit) {
+    filterClass.innerHTML += `<option value="" disabled>... และอีก ${classes.length - filterLimit} รายการ</option>`;
+  }
   
   const filterRoom = document.getElementById('filterRoom');
   filterRoom.innerHTML = '<option value="">ทั้งหมด</option>';
-  rooms.forEach(room => {
+  const roomsToShow = rooms.length > filterLimit ? 
+    rooms.slice(0, filterLimit) : rooms;
+  roomsToShow.forEach(room => {
     filterRoom.innerHTML += `<option value="${room}">${room}</option>`;
   });
+  if (rooms.length > filterLimit) {
+    filterRoom.innerHTML += `<option value="" disabled>... และอีก ${rooms.length - filterLimit} รายการ</option>`;
+  }
   
   const classSummarySelect = document.getElementById('classSummarySelect');
   classSummarySelect.innerHTML = '<option value="all">แสดงทั้งหมด</option>';
-  classes.forEach(cls => {
+  const classesSummaryToShow = classes.length > filterLimit ? 
+    classes.slice(0, filterLimit) : classes;
+  classesSummaryToShow.forEach(cls => {
     classSummarySelect.innerHTML += `<option value="${cls}">${cls}</option>`;
   });
+  if (classes.length > filterLimit) {
+    classSummarySelect.innerHTML += `<option value="" disabled>... และอีก ${classes.length - filterLimit} รายการ</option>`;
+  }
 }
 
 // ฟังก์ชันแสดงข้อมูลในลิสต์
 function renderDataLists() {
-  const teacherList = document.getElementById('teacherList');
-  teacherList.innerHTML = '';
-  teachers.forEach((teacher, index) => {
-    teacherList.innerHTML += `
-      <div class="data-item">
-        <span>${teacher}</span>
-        <div>
-          <button class="btn-warning" onclick="editTeacher(${index})">แก้ไข</button>
-          <button class="btn-danger" onclick="removeTeacher(${index})">ลบ</button>
-        </div>
-      </div>
-    `;
-  });
+  const listLimit = 50; // จำกัดการแสดงผลในลิสต์
   
-  const classList = document.getElementById('classList');
-  classList.innerHTML = '';
-  classes.forEach((cls, index) => {
-    classList.innerHTML += `
-      <div class="data-item">
-        <span>${cls}</span>
-        <div>
-          <button class="btn-warning" onclick="editClass(${index})">แก้ไข</button>
-          <button class="btn-danger" onclick="removeClass(${index})">ลบ</button>
+  const teacherList = document.getElementById('teacherList');
+  if (teacherList) {
+    teacherList.innerHTML = '';
+    const teachersToShow = teachers.slice(0, listLimit);
+    teachersToShow.forEach((teacher, index) => {
+      teacherList.innerHTML += `
+        <div class="data-item">
+          <span>${teacher}</span>
+          <div>
+            <button class="btn-warning" onclick="editTeacher(${index})">แก้ไข</button>
+            <button class="btn-danger" onclick="removeTeacher(${index})">ลบ</button>
+          </div>
         </div>
-      </div>
-    `;
-  });
+      `;
+    });
+    if (teachers.length > listLimit) {
+      teacherList.innerHTML += `
+        <div class="data-item" style="justify-content: center; color: #666; font-style: italic;">
+          ... และอีก ${teachers.length - listLimit} รายการ
+        </div>
+      `;
+    }
+  }
+  
+  // ทำแบบเดียวกันสำหรับ classList, subjectList, roomList
+  const classList = document.getElementById('classList');
+  if (classList) {
+    classList.innerHTML = '';
+    const classesToShow = classes.slice(0, listLimit);
+    classesToShow.forEach((cls, index) => {
+      classList.innerHTML += `
+        <div class="data-item">
+          <span>${cls}</span>
+          <div>
+            <button class="btn-warning" onclick="editClass(${index})">แก้ไข</button>
+            <button class="btn-danger" onclick="removeClass(${index})">ลบ</button>
+          </div>
+        </div>
+      `;
+    });
+    if (classes.length > listLimit) {
+      classList.innerHTML += `
+        <div class="data-item" style="justify-content: center; color: #666; font-style: italic;">
+          ... และอีก ${classes.length - listLimit} รายการ
+        </div>
+      `;
+    }
+  }
   
   const subjectList = document.getElementById('subjectList');
-  subjectList.innerHTML = '';
-  subjects.forEach((subject, index) => {
-    subjectList.innerHTML += `
-      <div class="data-item">
-        <span>${subject}</span>
-        <div>
-          <button class="btn-warning" onclick="editSubject(${index})">แก้ไข</button>
-          <button class="btn-danger" onclick="removeSubject(${index})">ลบ</button>
+  if (subjectList) {
+    subjectList.innerHTML = '';
+    const subjectsToShow = subjects.slice(0, listLimit);
+    subjectsToShow.forEach((subject, index) => {
+      subjectList.innerHTML += `
+        <div class="data-item">
+          <span>${subject}</span>
+          <div>
+            <button class="btn-warning" onclick="editSubject(${index})">แก้ไข</button>
+            <button class="btn-danger" onclick="removeSubject(${index})">ลบ</button>
+          </div>
         </div>
-      </div>
-    `;
-  });
+      `;
+    });
+    if (subjects.length > listLimit) {
+      subjectList.innerHTML += `
+        <div class="data-item" style="justify-content: center; color: #666; font-style: italic;">
+          ... และอีก ${subjects.length - listLimit} รายการ
+        </div>
+      `;
+    }
+  }
   
   const roomList = document.getElementById('roomList');
-  roomList.innerHTML = '';
-  rooms.forEach((room, index) => {
-    roomList.innerHTML += `
-      <div class="data-item">
-        <span>${room}</span>
-        <div>
-          <button class="btn-warning" onclick="editRoom(${index})">แก้ไข</button>
-          <button class="btn-danger" onclick="removeRoom(${index})">ลบ</button>
+  if (roomList) {
+    roomList.innerHTML = '';
+    const roomsToShow = rooms.slice(0, listLimit);
+    roomsToShow.forEach((room, index) => {
+      roomList.innerHTML += `
+        <div class="data-item">
+          <span>${room}</span>
+          <div>
+            <button class="btn-warning" onclick="editRoom(${index})">แก้ไข</button>
+            <button class="btn-danger" onclick="removeRoom(${index})">ลบ</button>
+          </div>
         </div>
-      </div>
-    `;
-  });
+      `;
+    });
+    if (rooms.length > listLimit) {
+      roomList.innerHTML += `
+        <div class="data-item" style="justify-content: center; color: #666; font-style: italic;">
+          ... และอีก ${rooms.length - listLimit} รายการ
+        </div>
+      `;
+    }
+  }
 }
 
 // =============================================
@@ -985,10 +1251,14 @@ function renderGrid() {
   });
 }
 
+// ปรับปรุงฟังก์ชัน renderList สำหรับข้อมูลจำนวนมาก
 function renderList() {
   const tb = document.querySelector('#lessonTable tbody');
+  if (!tb) return;
+  
+  // ล้างข้อมูลเดิม
   tb.innerHTML = '';
-
+  
   let filteredLessons = lessons.filter(lesson => {
     if (currentFilters.subject && lesson.subject !== currentFilters.subject) return false;
     if (currentFilters.teacher && lesson.teacher !== currentFilters.teacher) return false;
@@ -998,21 +1268,32 @@ function renderList() {
     if (currentFilters.period !== '' && lesson.period !== parseInt(currentFilters.period)) return false;
     return true;
   });
-
+  
+  // จำกัดการแสดงผลเพื่อประสิทธิภาพ
+  const displayLimit = 1000;
+  const displayAll = filteredLessons.length <= displayLimit;
+  const lessonsToDisplay = displayAll ? filteredLessons : filteredLessons.slice(0, displayLimit);
+  
   const tableHeader = document.querySelector('#lessonTable').closest('.card').querySelector('h2');
   const originalTitle = 'รายการจัดการเรียนทั้งหมด';
+  
+  let titleSuffix = '';
   if (Object.values(currentFilters).some(filter => filter !== '')) {
-    tableHeader.textContent = `${originalTitle} (${filteredLessons.length} รายการ)`;
-  } else {
-    tableHeader.textContent = originalTitle;
+    titleSuffix = ` (${filteredLessons.length} รายการ${!displayAll ? `, แสดง ${displayLimit} รายการแรก` : ''})`;
+  } else if (!displayAll) {
+    titleSuffix = ` (แสดง ${displayLimit} รายการแรกจากทั้งหมด ${filteredLessons.length} รายการ)`;
   }
-
-  filteredLessons.sort((a, b) => {
+  
+  tableHeader.textContent = originalTitle + titleSuffix;
+  
+  // เรียงลำดับข้อมูล
+  lessonsToDisplay.sort((a, b) => {
     if (a.day !== b.day) return a.day - b.day;
     return a.period - b.period;
   });
-
-  filteredLessons.forEach(l => {
+  
+  // เรนเดอร์ข้อมูล
+  lessonsToDisplay.forEach(l => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${l.subject}</td>
@@ -1027,7 +1308,67 @@ function renderList() {
       </td>`;
     tb.appendChild(tr);
   });
+  
+  // เพิ่มข้อความเมื่อมีการจำกัดการแสดงผล
+  if (!displayAll) {
+    const infoRow = document.createElement('tr');
+    infoRow.innerHTML = `
+      <td colspan="7" style="text-align: center; background: #fff3cd; color: #856404; font-style: italic;">
+        ⚠️ แสดง ${displayLimit} รายการแรกจากทั้งหมด ${filteredLessons.length} รายการ 
+        <button class="btn-info small" onclick="loadAllLessons()" style="margin-left: 10px;">โหลดทั้งหมด</button>
+      </td>
+    `;
+    tb.appendChild(infoRow);
+  }
+  
+  // เพิ่ม Event listeners
+  addTableEventListeners();
+}
 
+// ฟังก์ชันโหลดข้อมูลทั้งหมด (เมื่อผู้ใช้ต้องการเห็นทั้งหมด)
+async function loadAllLessons() {
+  try {
+    showLoading(true);
+    
+    // โหลดข้อมูลทั้งหมดจากเซิร์ฟเวอร์ใหม่
+    await loadAllData();
+    
+    // ล้างฟิลเตอร์และเรนเดอร์ใหม่
+    currentFilters = {
+      subject: '',
+      teacher: '',
+      classLevel: '',
+      room: '',
+      day: '',
+      period: ''
+    };
+    
+    document.getElementById('filterSubject').value = '';
+    document.getElementById('filterTeacher').value = '';
+    document.getElementById('filterClass').value = '';
+    document.getElementById('filterRoom').value = '';
+    document.getElementById('filterDay').value = '';
+    document.getElementById('filterPeriod').value = '';
+    
+    renderList();
+    
+    document.getElementById('message').innerHTML = 
+      '<div style="color:green;">✅ โหลดข้อมูลทั้งหมดเรียบร้อยแล้ว</div>';
+      
+  } catch (error) {
+    console.error('Error loading all lessons:', error);
+    document.getElementById('message').innerHTML = 
+      '<div style="color:red;">❌ เกิดข้อผิดพลาดในการโหลดข้อมูลทั้งหมด</div>';
+  } finally {
+    showLoading(false);
+  }
+}
+
+// เพิ่ม Event listeners สำหรับตาราง
+function addTableEventListeners() {
+  const tb = document.querySelector('#lessonTable tbody');
+  if (!tb) return;
+  
   tb.querySelectorAll('.edit-btn').forEach(b => b.onclick = () => {
     if (preventGuestAction("แก้ไขรายการสอน")) return;
     const lesson = lessons.find(x => x.id === b.dataset.id);
@@ -1035,7 +1376,7 @@ function renderList() {
       editLesson(lesson);
     }
   });
-
+  
   tb.querySelectorAll('.btn-danger').forEach(b => b.onclick = async () => {
     if (preventGuestAction("ลบรายการสอน")) return;
     if (confirm('คุณแน่ใจว่าต้องการลบรายการสอนนี้?')) {
@@ -1627,6 +1968,188 @@ document.getElementById('classSummarySelect').addEventListener('change', renderC
 // ฟังก์ชันจัดการ JSON
 // =============================================
 
+// ฟังก์ชันทำความสะอาดข้อมูลก่อนนำเข้า
+function cleanImportedData(data) {
+  if (data.teachers) {
+    data.teachers = data.teachers
+      .filter(teacher => teacher && teacher.toString().trim() !== '')
+      .map(teacher => teacher.toString().trim())
+      .filter((teacher, index, self) => self.indexOf(teacher) === index);
+  }
+  
+  if (data.classes) {
+    data.classes = data.classes
+      .filter(cls => cls && cls.toString().trim() !== '')
+      .map(cls => cls.toString().trim())
+      .filter((cls, index, self) => self.indexOf(cls) === index);
+  }
+  
+  if (data.subjects) {
+    data.subjects = data.subjects
+      .filter(subject => subject && subject.toString().trim() !== '')
+      .map(subject => subject.toString().trim())
+      .filter((subject, index, self) => self.indexOf(subject) === index);
+  }
+  
+  if (data.rooms) {
+    data.rooms = data.rooms
+      .filter(room => room && room.toString().trim() !== '')
+      .map(room => room.toString().trim())
+      .filter((room, index, self) => self.indexOf(room) === index);
+  }
+  
+  if (data.lessons) {
+    data.lessons = data.lessons
+      .filter(lesson => lesson && lesson.id && lesson.teacher && lesson.subject)
+      .map(lesson => ({
+        id: lesson.id.toString().trim(),
+        teacher: lesson.teacher.toString().trim(),
+        subject: lesson.subject.toString().trim(),
+        classLevel: lesson.classLevel ? lesson.classLevel.toString().trim() : '',
+        room: lesson.room ? lesson.room.toString().trim() : '',
+        day: typeof lesson.day === 'number' ? lesson.day : parseInt(lesson.day) || 0,
+        period: typeof lesson.period === 'number' ? lesson.period : parseInt(lesson.period) || 0
+      }))
+      .filter((lesson, index, self) => 
+        self.findIndex(l => l.id === lesson.id) === index
+      );
+  }
+  
+  return data;
+}
+
+// ฟังก์ชันนำเข้าข้อมูลจาก JSON
+async function importJSON(file) {
+  console.log('เริ่มนำเข้าไฟล์ JSON:', file.name);
+  
+  const reader = new FileReader();
+  
+  reader.onload = async function(e) {
+    try {
+      showLoading(true);
+      console.log('กำลังอ่านไฟล์...');
+      
+      if (!e.target.result) {
+        throw new Error('ไฟล์ว่างเปล่า');
+      }
+      
+      let rawData;
+      try {
+        rawData = JSON.parse(e.target.result);
+        console.log('Parse JSON สำเร็จ', Object.keys(rawData));
+      } catch (parseError) {
+        console.error('Error parsing JSON:', parseError);
+        throw new Error('รูปแบบไฟล์ JSON ไม่ถูกต้อง: ' + parseError.message);
+      }
+      
+      const data = cleanImportedData(rawData);
+      console.log('ข้อมูลหลังจากทำความสะอาด:', {
+        teachers: data.teachers?.length,
+        classes: data.classes?.length,
+        subjects: data.subjects?.length,
+        rooms: data.rooms?.length,
+        lessons: data.lessons?.length
+      });
+      
+      if (!data.teachers || !data.classes || !data.subjects || !data.rooms || !data.lessons) {
+        console.error('โครงสร้างไฟล์ไม่ครบ:', {
+          teachers: !!data.teachers,
+          classes: !!data.classes,
+          subjects: !!data.subjects,
+          rooms: !!data.rooms,
+          lessons: !!data.lessons
+        });
+        throw new Error('รูปแบบไฟล์ไม่ถูกต้อง - ไฟล์ต้องมีข้อมูลครู, ชั้นเรียน, วิชา, ห้อง, และตารางเรียน');
+      }
+      
+      const stats = {
+        teachers: data.teachers.length,
+        classes: data.classes.length,
+        subjects: data.subjects.length,
+        rooms: data.rooms.length,
+        lessons: data.lessons.length
+      };
+      
+      console.log('สถิติข้อมูลที่จะนำเข้า:', stats);
+      
+      if (!confirm(`การนำเข้าข้อมูลจะทับข้อมูลปัจจุบันทั้งหมด\n\nข้อมูลที่จะนำเข้า:\n• ครู: ${stats.teachers} ท่าน\n• ชั้นเรียน: ${stats.classes} ห้อง\n• วิชา: ${stats.subjects} รายการ\n• ห้อง: ${stats.rooms} ห้อง\n• ตารางเรียน: ${stats.lessons} คาบ\n\nต้องการดำเนินการต่อหรือไม่?`)) {
+        showLoading(false);
+        return;
+      }
+      
+      teachers = data.teachers;
+      classes = data.classes;
+      subjects = data.subjects;
+      rooms = data.rooms;
+      lessons = data.lessons;
+      
+      console.log('อัพเดทข้อมูลในตัวแปรสำเร็จ');
+      
+      backupToLocalStorage({ teachers, classes, subjects, rooms, lessons });
+      console.log('บันทึกลง Local Storage สำเร็จ');
+      
+      let saveResult = false;
+      let saveError = null;
+      
+      try {
+        console.log('กำลังบันทึกลง Google Sheets...');
+        saveResult = await saveAllData();
+        console.log('ผลการบันทึก Google Sheets:', saveResult);
+      } catch (error) {
+        console.error('Error saving to Google Sheets:', error);
+        saveError = error;
+        saveResult = false;
+      }
+      
+      loadDropdowns();
+      renderAll();
+      
+      if (saveResult) {
+        document.getElementById('message').innerHTML = 
+          `<div style="color:green;">
+            ✅ นำเข้าข้อมูลจาก JSON และบันทึกลง Google Sheet สำเร็จแล้ว!<br>
+            <small>ครู: ${stats.teachers} ท่าน | วิชา: ${stats.subjects} รายการ | ตารางเรียน: ${stats.lessons} คาบ</small>
+          </div>`;
+      } else {
+        document.getElementById('message').innerHTML = 
+          `<div style="color:orange;">
+            ✅ นำเข้าข้อมูลจาก JSON สำเร็จ (บันทึกใน Local Storage)<br>
+            <small>${saveError ? saveError.message : 'ไม่สามารถเชื่อมต่อกับ Google Sheets ได้'}</small><br>
+            <small>ครู: ${stats.teachers} ท่าน | วิชา: ${stats.subjects} รายการ | ตารางเรียน: ${stats.lessons} คาบ</small>
+            <br><br>
+            <strong>คำแนะนำ:</strong><br>
+            • ข้อมูลถูกบันทึกในเบราว์เซอร์แล้ว<br>
+            • สามารถส่งข้อมูลไป Google Sheets ได้ภายหลังโดยคลิกปุ่ม "ส่งข้อมูลไป Google Sheets"<br>
+            • หรือใช้ปุ่ม "ทดสอบการเชื่อมต่อ" เพื่อตรวจสอบการเชื่อมต่อ
+          </div>`;
+      }
+      
+    } catch (error) {
+      console.error('Error in importJSON:', error);
+      document.getElementById('message').innerHTML = 
+        `<div style="color:red;">
+          ❌ เกิดข้อผิดพลาดในการนำเข้าไฟล์ JSON<br>
+          <small>${error.message}</small><br>
+          <small>กรุณาตรวจสอบว่าไฟล์มีรูปแบบที่ถูกต้องและไม่เสียหาย</small>
+        </div>`;
+    } finally {
+      showLoading(false);
+    }
+  };
+  
+  reader.onerror = function(error) {
+    console.error('File read error:', error);
+    showLoading(false);
+    document.getElementById('message').innerHTML = 
+      `<div style="color:red;">
+        ❌ เกิดข้อผิดพลาดในการอ่านไฟล์<br>
+        <small>กรุณาตรวจสอบว่าไฟล์ไม่เสียหายและมีสิทธิ์ในการอ่าน</small>
+      </div>`;
+  };
+  
+  reader.readAsText(file);
+}
+
 // ฟังก์ชันดาวน์โหลดข้อมูลเป็น JSON
 function downloadJSON() {
   const data = {
@@ -1665,52 +2188,234 @@ function downloadJSON() {
     </div>`;
 }
 
-// ฟังก์ชันนำเข้าข้อมูลจาก JSON
-async function importJSON(file) {
-  const reader = new FileReader();
+// ฟังก์ชันล้างข้อมูลทั้งหมด
+async function clearAllData() {
+  if (!confirm('⚠️ คุณแน่ใจว่าต้องการล้างข้อมูลทั้งหมด?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้!')) {
+    return;
+  }
   
-  reader.onload = async function(e) {
-    try {
-      const data = JSON.parse(e.target.result);
+  try {
+    showLoading(true);
+    
+    teachers = [];
+    classes = [];
+    subjects = [];
+    rooms = [];
+    lessons = [];
+    
+    await saveAllData();
+    loadDropdowns();
+    renderAll();
+    
+    document.getElementById('message').innerHTML = 
+      '<div style="color:green;">✅ ล้างข้อมูลทั้งหมดเรียบร้อยแล้ว</div>';
       
-      if (!data.teachers || !data.classes || !data.subjects || !data.rooms || !data.lessons) {
-        throw new Error('รูปแบบไฟล์ไม่ถูกต้อง - ไฟล์ต้องมีข้อมูลครู, ชั้นเรียน, วิชา, ห้อง, และตารางเรียน');
+  } catch (error) {
+    console.error('Error clearing data:', error);
+    document.getElementById('message').innerHTML = 
+      `<div style="color:red;">❌ เกิดข้อผิดพลาดในการล้างข้อมูล</div>`;
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ฟังก์ชัน Debug ข้อมูล
+function debugData() {
+  console.log('=== DEBUG DATA ===');
+  console.log('Teachers:', teachers);
+  console.log('Classes:', classes);
+  console.log('Subjects:', subjects);
+  console.log('Rooms:', rooms);
+  console.log('Lessons:', lessons);
+  console.log('Local Storage Teachers:', localStorage.getItem('teachers'));
+  console.log('Local Storage Classes:', localStorage.getItem('classes'));
+  console.log('Local Storage Subjects:', localStorage.getItem('subjects'));
+  console.log('Local Storage Rooms:', localStorage.getItem('rooms'));
+  console.log('Local Storage Lessons:', localStorage.getItem('lessons'));
+  
+  const stats = getStatistics();
+  alert(`📊 สถิติข้อมูลปัจจุบัน:\n\n` +
+        `• ครู: ${stats.teachers} ท่าน\n` +
+        `• ชั้นเรียน: ${stats.classes} ห้อง\n` +
+        `• วิชา: ${stats.subjects} รายการ\n` +
+        `• ห้อง: ${stats.rooms} ห้อง\n` +
+        `• ตารางเรียน: ${stats.lessons} คาบ\n\n` +
+        `ดูรายละเอียดใน Console (F12)`);
+}
+
+// เพิ่มฟังก์ชันตรวจสอบและแสดงสถิติข้อมูล
+function showDataStatistics() {
+  const stats = getStatistics();
+  
+  const statsHtml = `
+    <div style="background: #f0fdf4; padding: 15px; border-radius: 8px; border: 1px solid #d1fae5; margin: 10px 0;">
+      <h4 style="margin: 0 0 10px 0; color: #065f46;">📊 สถิติข้อมูลทั้งหมด</h4>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;">
+        <div style="text-align: center; background: white; padding: 10px; border-radius: 6px;">
+          <div style="font-size: 24px; font-weight: bold; color: #10b981;">${stats.teachers}</div>
+          <div style="font-size: 12px; color: #4b5563;">ครู</div>
+        </div>
+        <div style="text-align: center; background: white; padding: 10px; border-radius: 6px;">
+          <div style="font-size: 24px; font-weight: bold; color: #10b981;">${stats.classes}</div>
+          <div style="font-size: 12px; color: #4b5563;">ชั้นเรียน</div>
+        </div>
+        <div style="text-align: center; background: white; padding: 10px; border-radius: 6px;">
+          <div style="font-size: 24px; font-weight: bold; color: #10b981;">${stats.subjects}</div>
+          <div style="font-size: 12px; color: #4b5563;">รายวิชา</div>
+        </div>
+        <div style="text-align: center; background: white; padding: 10px; border-radius: 6px;">
+          <div style="font-size: 24px; font-weight: bold; color: #10b981;">${stats.rooms}</div>
+          <div style="font-size: 12px; color: #4b5563;">ห้อง</div>
+        </div>
+        <div style="text-align: center; background: white; padding: 10px; border-radius: 6px;">
+          <div style="font-size: 24px; font-weight: bold; color: #10b981;">${stats.lessons}</div>
+          <div style="font-size: 12px; color: #4b5563;">ตารางเรียน</div>
+        </div>
+      </div>
+      ${stats.teachers > 100 || stats.classes > 100 || stats.subjects > 100 || stats.rooms > 100 || stats.lessons > 100 ? 
+        `<div style="margin-top: 10px; padding: 8px; background: #fff3cd; border-radius: 4px; color: #856404; font-size: 12px;">
+          ⚠️ ระบบกำลังจัดการกับข้อมูลจำนวนมาก การทำงานบางอย่างอาจใช้เวลานานกว่าเดิม
+        </div>` : ''
       }
-      
-      if (!confirm(`การนำเข้าข้อมูลจะทับข้อมูลปัจจุบันทั้งหมด\n\nข้อมูลที่จะนำเข้า:\n• ครู: ${data.teachers.length} ท่าน\n• ชั้นเรียน: ${data.classes.length} ห้อง\n• วิชา: ${data.subjects.length} รายการ\n• ห้อง: ${data.rooms.length} ห้อง\n• ตารางเรียน: ${data.lessons.length} คาบ\n\nต้องการดำเนินการต่อหรือไม่?`)) {
-        return;
+    </div>
+  `;
+  
+  return statsHtml;
+}
+
+// ฟังก์ชันสำหรับการจัดการข้อมูลจำนวนมาก
+function getStatistics() {
+  return {
+    teachers: teachers.length,
+    classes: classes.length,
+    subjects: subjects.length,
+    rooms: rooms.length,
+    lessons: lessons.length,
+    totalPeriods: lessons.reduce((total, lesson) => total + 1, 0)
+  };
+}
+
+// ฟังก์ชันแสดงสถิติ
+function showStatistics() {
+  const stats = getStatistics();
+  alert(`📊 สถิติข้อมูลตารางเรียน:\n\n• ครู: ${stats.teachers} ท่าน\n• ชั้นเรียน: ${stats.classes} ห้อง\n• วิชา: ${stats.subjects} รายการ\n• ห้อง: ${stats.rooms} ห้อง\n• ตารางเรียน: ${stats.lessons} คาบ\n• รวมทั้งหมด: ${stats.totalPeriods} คาบสอน`);
+}
+
+// เพิ่มฟังก์ชันแบ่งข้อมูลเป็นชุดเล็กๆ
+async function saveDataInChunks() {
+  if (preventGuestAction("ส่งข้อมูลแบบแบ่งชุด")) return;
+  
+  try {
+    showLoading(true);
+    
+    const CHUNK_SIZE = 50; // ลดขนาดชุดข้อมูลเพื่อป้องกันปัญหา
+    
+    let successCount = 0;
+    let errorCount = 0;
+    
+    // บันทึกครูแบบแบ่งชุด
+    if (teachers.length > 0) {
+      for (let i = 0; i < teachers.length; i += CHUNK_SIZE) {
+        const chunk = teachers.slice(i, i + CHUNK_SIZE);
+        try {
+          await callGoogleAppsScript('saveAllData', { teachers: chunk });
+          successCount++;
+          console.log(`Saved teachers chunk ${i / CHUNK_SIZE + 1}`);
+        } catch (error) {
+          errorCount++;
+          console.error(`Error saving teachers chunk ${i / CHUNK_SIZE + 1}:`, error);
+        }
       }
-      
-      teachers = data.teachers;
-      classes = data.classes;
-      subjects = data.subjects;
-      rooms = data.rooms;
-      lessons = data.lessons;
-      
-      // บันทึกลง Google Sheet
-      const saved = await saveAllData();
-      
-      if (saved) {
-        loadDropdowns();
-        renderAll();
-        document.getElementById('message').innerHTML = 
-          `<div style="color:green;">
-            📤 นำเข้าข้อมูลจาก JSON และบันทึกลง Google Sheet สำเร็จแล้ว<br>
-            <small>ครู: ${teachers.length} ท่าน | วิชา: ${subjects.length} รายการ | ตารางเรียน: ${lessons.length} คาบ</small>
-          </div>`;
+    }
+    
+    // บันทึกชั้นเรียนแบบแบ่งชุด
+    if (classes.length > 0) {
+      for (let i = 0; i < classes.length; i += CHUNK_SIZE) {
+        const chunk = classes.slice(i, i + CHUNK_SIZE);
+        try {
+          await callGoogleAppsScript('saveAllData', { classes: chunk });
+          successCount++;
+          console.log(`Saved classes chunk ${i / CHUNK_SIZE + 1}`);
+        } catch (error) {
+          errorCount++;
+          console.error(`Error saving classes chunk ${i / CHUNK_SIZE + 1}:`, error);
+        }
       }
-      
-    } catch (error) {
-      console.error('Error importing JSON:', error);
+    }
+    
+    // บันทึกรายวิชาแบบแบ่งชุด
+    if (subjects.length > 0) {
+      for (let i = 0; i < subjects.length; i += CHUNK_SIZE) {
+        const chunk = subjects.slice(i, i + CHUNK_SIZE);
+        try {
+          await callGoogleAppsScript('saveAllData', { subjects: chunk });
+          successCount++;
+          console.log(`Saved subjects chunk ${i / CHUNK_SIZE + 1}`);
+        } catch (error) {
+          errorCount++;
+          console.error(`Error saving subjects chunk ${i / CHUNK_SIZE + 1}:`, error);
+        }
+      }
+    }
+    
+    // บันทึกห้องแบบแบ่งชุด
+    if (rooms.length > 0) {
+      for (let i = 0; i < rooms.length; i += CHUNK_SIZE) {
+        const chunk = rooms.slice(i, i + CHUNK_SIZE);
+        try {
+          await callGoogleAppsScript('saveAllData', { rooms: chunk });
+          successCount++;
+          console.log(`Saved rooms chunk ${i / CHUNK_SIZE + 1}`);
+        } catch (error) {
+          errorCount++;
+          console.error(`Error saving rooms chunk ${i / CHUNK_SIZE + 1}:`, error);
+        }
+      }
+    }
+    
+    // บันทึกตารางเรียนแบบแบ่งชุด
+    if (lessons.length > 0) {
+      for (let i = 0; i < lessons.length; i += CHUNK_SIZE) {
+        const chunk = lessons.slice(i, i + CHUNK_SIZE);
+        try {
+          await callGoogleAppsScript('saveAllData', { lessons: chunk });
+          successCount++;
+          console.log(`Saved lessons chunk ${i / CHUNK_SIZE + 1}`);
+        } catch (error) {
+          errorCount++;
+          console.error(`Error saving lessons chunk ${i / CHUNK_SIZE + 1}:`, error);
+        }
+      }
+    }
+    
+    if (errorCount === 0) {
       document.getElementById('message').innerHTML = 
-        `<div style="color:red;">
-          ❌ เกิดข้อผิดพลาดในการนำเข้า<br>
-          <small>${error.message}</small>
+        `<div style="color:green;">
+          ✅ บันทึกข้อมูลทั้งหมดลง Google Sheets สำเร็จ!<br>
+          <small>ส่งข้อมูลทั้งหมด ${successCount} ชุด</small>
+        </div>`;
+    } else {
+      document.getElementById('message').innerHTML = 
+        `<div style="color:orange;">
+          ⚠️ บันทึกข้อมูลบางส่วนลง Google Sheets<br>
+          <small>สำเร็จ: ${successCount} ชุด | ล้มเหลว: ${errorCount} ชุด</small>
+          <br><br>
+          <strong>คำแนะนำ:</strong><br>
+          • ข้อมูลบางส่วนอาจถูกบันทึกแล้ว<br>
+          • ลองส่งข้อมูลอีกครั้งหรือแบ่งข้อมูลเป็นชุดเล็กลง
         </div>`;
     }
-  };
-  
-  reader.readAsText(file);
+    
+  } catch (error) {
+    console.error('Error in saveDataInChunks:', error);
+    document.getElementById('message').innerHTML = 
+      `<div style="color:red;">
+        ❌ เกิดข้อผิดพลาดในการส่งข้อมูลแบบแบ่งชุด<br>
+        <small>${error.message}</small>
+      </div>`;
+  } finally {
+    showLoading(false);
+  }
 }
 
 // Event Listeners สำหรับปุ่ม JSON และ Google Sheets
@@ -1729,8 +2434,11 @@ document.getElementById('jsonFileInput').onchange = function (e) {
 };
 
 document.getElementById('exportToSheetsBtn').onclick = exportToGoogleSheets;
+document.getElementById('exportToSheetsChunkBtn').onclick = saveDataInChunks;
 document.getElementById('importFromSheetsBtn').onclick = importFromGoogleSheets;
 document.getElementById('testConnectionBtn').onclick = testSimpleConnection;
+document.getElementById('clearDataBtn').onclick = clearAllData;
+document.getElementById('debugBtn').onclick = debugData;
 
 // เมื่อโหลดหน้าเว็บเสร็จ
 window.addEventListener('DOMContentLoaded', function () {
@@ -1750,7 +2458,6 @@ window.addEventListener('DOMContentLoaded', function () {
   setupFilters();
   setupSummaryTabs();
 
-  // โหลดข้อมูลเริ่มต้น
   console.log('📥 กำลังโหลดข้อมูลเริ่มต้น...');
   loadAllData().then(() => {
     loadDropdowns();
@@ -1758,21 +2465,3 @@ window.addEventListener('DOMContentLoaded', function () {
     console.log('✅ ระบบพร้อมใช้งานแล้ว!');
   });
 });
-
-// ฟังก์ชันสำหรับการจัดการข้อมูลจำนวนมาก
-function getStatistics() {
-  return {
-    teachers: teachers.length,
-    classes: classes.length,
-    subjects: subjects.length,
-    rooms: rooms.length,
-    lessons: lessons.length,
-    totalPeriods: lessons.reduce((total, lesson) => total + 1, 0)
-  };
-}
-
-// ฟังก์ชันแสดงสถิติ
-function showStatistics() {
-  const stats = getStatistics();
-  alert(`📊 สถิติข้อมูลตารางเรียน:\n\n• ครู: ${stats.teachers} ท่าน\n• ชั้นเรียน: ${stats.classes} ห้อง\n• วิชา: ${stats.subjects} รายการ\n• ห้อง: ${stats.rooms} ห้อง\n• ตารางเรียน: ${stats.lessons} คาบ\n• รวมทั้งหมด: ${stats.totalPeriods} คาบสอน`);
-}
