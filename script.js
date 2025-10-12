@@ -2,7 +2,7 @@ const periods = ["คาบ 1 (08:30-09:20)", "คาบ 2 (09:20-10:10)", "ค�
 const days = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร️"];
 
 // URL ของ Google Apps Script
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbzxxpADonGvH4hRCG4i7szaqbIDFyoFYSFVXoroyJYrw2CnftaaFB3qekhw9P69qbckwA/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxe-BTZZoVwmZ1qvvV9T3IOpepwZBTH7MBAyhp4utsahBdlzgJrvLAtSoh2JaoPC-r0NA/exec';
 
 let lessons = [];
 let teachers = [];
@@ -143,7 +143,7 @@ async function testSimpleConnection() {
   try {
     showLoading(true);
     
-    console.log('Testing connection to Google Apps Script...');
+    console.log('Testing connection to Google Sheets...');
     
     const result = await callGoogleAppsScript('ping');
     
@@ -356,7 +356,7 @@ async function loadAllData() {
   }
 }
 
-// ฟังก์ชันบันทึกข้อมูลทั้งหมดไปยัง Google Sheet
+// ฟังก์ชันบันทึกข้อมูลทั้งหมดไปยัง Google Sheet (เวอร์ชันเร็ว)
 async function saveAllData() {
   try {
     showLoading(true);
@@ -387,8 +387,16 @@ async function saveAllData() {
       throw new Error('ไม่มีข้อมูลที่จะบันทึก');
     }
     
-    // ใช้ saveLargeData สำหรับข้อมูลจำนวนมาก
-    const action = dataSize > 50000 ? 'saveLargeData' : 'saveAllData';
+    // เลือกวิธีบันทึกตามขนาดข้อมูลเพื่อความเร็ว
+    let action;
+    if (dataSize > 100000) { // ข้อมูลใหญ่มาก
+      action = 'saveLargeData';
+    } else if (dataSize > 50000) { // ข้อมูลขนาดกลาง
+      action = 'saveAllDataFast';
+    } else { // ข้อมูลขนาดเล็ก
+      action = 'saveAllData';
+    }
+    
     console.log(`Using action: ${action} for data size: ${dataSize} bytes`);
     
     const result = await callGoogleAppsScript(action, dataToSave);
@@ -396,10 +404,11 @@ async function saveAllData() {
     if (result && result.success) {
       backupToLocalStorage(dataToSave);
       
-      console.log('Successfully saved to Google Sheets');
+      const timeMsg = result.executionTime ? ` ใน ${result.executionTime} วินาที` : '';
+      console.log('Successfully saved to Google Sheets' + timeMsg);
       document.getElementById('message').innerHTML = 
         `<div style="color:green;">
-          ✅ บันทึกข้อมูลลง Google Sheets สำเร็จ<br>
+          ✅ บันทึกข้อมูลลง Google Sheets สำเร็จ${timeMsg}<br>
           <small>${result.message || 'บันทึกข้อมูลเรียบร้อย'}</small>
           ${result.stats ? `<br><small>ครู: ${result.stats.teachers || 0} | วิชา: ${result.stats.subjects || 0} | ตารางเรียน: ${result.stats.lessons || 0}</small>` : ''}
         </div>`;
