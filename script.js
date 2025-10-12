@@ -2,7 +2,7 @@ const periods = ["คาบ 1 (08:30-09:20)", "คาบ 2 (09:20-10:10)", "ค�
 const days = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร️"];
 
 // URL ของ Google Apps Script
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbxe-BTZZoVwmZ1qvvV9T3IOpepwZBTH7MBAyhp4utsahBdlzgJrvLAtSoh2JaoPC-r0NA/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbyA3Od6AAgDKco721g5_MvfWldRugIb2EPE7HXTmc51WsARPV1hIDF0cz6KKy99heNqaQ/exec';
 
 let lessons = [];
 let teachers = [];
@@ -30,10 +30,83 @@ let currentFilters = {
 let isAdminMode = false;
 const ADMIN_PASSWORD = "admin452026";
 
-// เพิ่มตัวแปรสำหรับจัดการข้อมูลจำนวนมาก
-const BATCH_SIZE = 100;
-let currentBatch = 0;
-let allDataLoaded = false;
+// ตัวแปรจัดการ loading
+let loadingTimeoutId = null;
+let currentLoadingOperation = null;
+
+// =============================================
+// ฟังก์ชันจัดการ Loading (แก้ไขแล้ว)
+// =============================================
+
+// ฟังก์ชันแสดง/ซ่อน loading (เวอร์ชันป้องกันการติดค้าง)
+function showLoading(show, operation = 'ทั่วไป') {
+  const loadingElement = document.getElementById('loading');
+  
+  if (loadingElement) {
+    // ล้าง timeout เดิม
+    if (loadingTimeoutId) {
+      clearTimeout(loadingTimeoutId);
+      loadingTimeoutId = null;
+    }
+    
+    if (show) {
+      currentLoadingOperation = operation;
+      loadingElement.style.display = 'flex';
+      console.log(`🔄 เริ่มโหลด: ${operation}`);
+      
+      // ตั้งค่า timeout อัตโนมัติเพื่อป้องกันการติดค้าง
+      loadingTimeoutId = setTimeout(() => {
+        if (loadingElement.style.display === 'flex') {
+          console.warn(`⚠️ โหลดนานเกิน 30 วินาที: ${operation}`);
+          document.getElementById('message').innerHTML = 
+            `<div style="color:orange;">
+              ⚠️ การโหลดใช้เวลานานกว่าปกติ<br>
+              <small>กำลังพยายามดำเนินการ: ${operation}</small>
+              <br><small>หากติดขัดนานเกินไป กรุณากดปุ่ม "ยกเลิกการโหลด"</small>
+            </div>`;
+        }
+      }, 30000); // 30 seconds timeout
+      
+    } else {
+      loadingElement.style.display = 'none';
+      currentLoadingOperation = null;
+      console.log(`✅ โหลดเสร็จสิ้น: ${operation}`);
+    }
+  }
+}
+
+// ฟังก์ชันบังคับซ่อน loading
+function forceHideLoading() {
+  console.log('🚫 บังคับซ่อน loading โดยผู้ใช้');
+  
+  // ล้าง timeout
+  if (loadingTimeoutId) {
+    clearTimeout(loadingTimeoutId);
+    loadingTimeoutId = null;
+  }
+  
+  // ซ่อน loading
+  const loadingElement = document.getElementById('loading');
+  if (loadingElement) {
+    loadingElement.style.display = 'none';
+  }
+  
+  currentLoadingOperation = null;
+  
+  document.getElementById('message').innerHTML = 
+    `<div style="color:orange;">
+      🚫 ยกเลิกการโหลดโดยผู้ใช้<br>
+      <small>หากมีปัญหาในการโหลดข้อมูล กรุณารีเฟรชหน้าเว็บหรือลองอีกครั้ง</small>
+    </div>`;
+}
+
+// ฟังก์ชันตรวจสอบสถานะการโหลด
+function checkLoadingStatus() {
+  const loadingElement = document.getElementById('loading');
+  if (loadingElement && loadingElement.style.display === 'flex') {
+    console.log(`📊 กำลังตรวจสอบสถานะการโหลด: ${currentLoadingOperation || 'ไม่ทราบการดำเนินการ'}`);
+  }
+}
 
 // =============================================
 // ฟังก์ชันจัดการ Google Apps Script
@@ -41,29 +114,47 @@ let allDataLoaded = false;
 
 // ฟังก์ชันเรียกใช้งาน Google Apps Script แบบ POST สำหรับข้อมูลขนาดใหญ่
 async function callGoogleAppsScriptPost(action, data = {}) {
+  const operation = `POST ${action}`;
+  console.log(`📤 เริ่ม ${operation}`);
+  
   try {
     const payload = {
       action: action,
       data: data
     };
     
+    // ตั้งค่า timeout สำหรับ fetch
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 seconds
+    
     const response = await fetch(GAS_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
     
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     
     const result = await response.json();
+    console.log(`✅ สำเร็จ ${operation}`);
     return result;
     
   } catch (error) {
-    console.error('POST request failed, falling back to JSONP:', error);
+    console.error(`❌ ล้มเหลว ${operation}:`, error);
+    
+    if (error.name === 'AbortError') {
+      throw new Error('การเชื่อมต่อใช้เวลานานเกินไป (เกิน 25 วินาที)');
+    }
+    
+    // ลองใช้ JSONP เป็น fallback
+    console.log('🔄 ลองใช้ JSONP แทน...');
     return await callGoogleAppsScript(action, data);
   }
 }
@@ -75,9 +166,12 @@ async function callGoogleAppsScript(action, data = {}) {
   
   // ถ้าข้อมูลใหญ่กว่า 10KB ให้ใช้ POST
   if (dataSize > 10000) {
-    console.log(`Data too large for JSONP (${dataSize} bytes), using POST`);
+    console.log(`📦 ข้อมูลใหญ่เกิน JSONP (${dataSize} bytes), ใช้ POST แทน`);
     return await callGoogleAppsScriptPost(action, data);
   }
+  
+  const operation = `JSONP ${action}`;
+  console.log(`📤 เริ่ม ${operation}`);
   
   return new Promise((resolve, reject) => {
     const callbackName = 'gas_callback_' + Math.round(100000 * Math.random());
@@ -89,9 +183,11 @@ async function callGoogleAppsScript(action, data = {}) {
       }
       clearTimeout(timeoutId);
       
+      console.log(`✅ สำเร็จ ${operation}`);
+      
       if (response && response.success === false && response.error && response.error.includes('Data too large')) {
         // ถ้า JSONP ล้มเหลวเพราะข้อมูลใหญ่เกินไป ให้ลองใช้ POST
-        console.log('JSONP failed due to large data, trying POST...');
+        console.log('🔄 JSONP ข้อมูลใหญ่เกินไป, ลองใช้ POST...');
         callGoogleAppsScriptPost(action, data).then(resolve).catch(reject);
       } else {
         resolve(response);
@@ -119,8 +215,10 @@ async function callGoogleAppsScript(action, data = {}) {
       }
       clearTimeout(timeoutId);
       
+      console.error(`❌ ล้มเหลว ${operation}: JSONP error`);
+      
       // ถ้า JSONP ล้มเหลว ให้ลองใช้ POST
-      console.log('JSONP failed, trying POST...');
+      console.log('🔄 ลองใช้ POST แทน...');
       callGoogleAppsScriptPost(action, data).then(resolve).catch(reject);
     };
     
@@ -132,7 +230,8 @@ async function callGoogleAppsScript(action, data = {}) {
         if (script.parentNode) {
           document.body.removeChild(script);
         }
-        reject(new Error('JSONP request timeout (20 seconds)'));
+        console.error(`❌ ล้มเหลว ${operation}: Timeout 20 วินาที`);
+        reject(new Error('การเชื่อมต่อใช้เวลานานเกินไป (เกิน 20 วินาที)'));
       }
     }, 20000);
   });
@@ -141,9 +240,9 @@ async function callGoogleAppsScript(action, data = {}) {
 // ฟังก์ชันทดสอบการเชื่อมต่อ
 async function testSimpleConnection() {
   try {
-    showLoading(true);
+    showLoading(true, 'ทดสอบการเชื่อมต่อ');
     
-    console.log('Testing connection to Google Sheets...');
+    console.log('🔗 กำลังทดสอบการเชื่อมต่อ Google Sheets...');
     
     const result = await callGoogleAppsScript('ping');
     
@@ -158,7 +257,7 @@ async function testSimpleConnection() {
       throw new Error(result?.error || 'Failed to connect');
     }
   } catch (error) {
-    console.error('Connection test failed:', error);
+    console.error('❌ การทดสอบการเชื่อมต่อล้มเหลว:', error);
     
     const errorHtml = `
       <div style="color:red;">
@@ -176,16 +275,16 @@ async function testSimpleConnection() {
     document.getElementById('message').innerHTML = errorHtml;
     return null;
   } finally {
-    showLoading(false);
+    showLoading(false, 'ทดสอบการเชื่อมต่อ');
   }
 }
 
 // ฟังก์ชันตรวจสอบและซ่อมแซมข้อมูล
 function validateAndRepairData() {
-  console.log('กำลังตรวจสอบและซ่อมแซมข้อมูล...');
+  console.log('🔧 กำลังตรวจสอบและซ่อมแซมข้อมูล...');
   
   if (!teachers || !Array.isArray(teachers)) {
-    console.warn('Teachers array is invalid, resetting...');
+    console.warn('⚠️ Teachers array is invalid, resetting...');
     teachers = [];
   } else {
     teachers = teachers.filter(teacher => 
@@ -194,7 +293,7 @@ function validateAndRepairData() {
   }
   
   if (!classes || !Array.isArray(classes)) {
-    console.warn('Classes array is invalid, resetting...');
+    console.warn('⚠️ Classes array is invalid, resetting...');
     classes = [];
   } else {
     classes = classes.filter(cls => 
@@ -203,7 +302,7 @@ function validateAndRepairData() {
   }
   
   if (!subjects || !Array.isArray(subjects)) {
-    console.warn('Subjects array is invalid, resetting...');
+    console.warn('⚠️ Subjects array is invalid, resetting...');
     subjects = [];
   } else {
     subjects = subjects.filter(subject => 
@@ -212,7 +311,7 @@ function validateAndRepairData() {
   }
   
   if (!rooms || !Array.isArray(rooms)) {
-    console.warn('Rooms array is invalid, resetting...');
+    console.warn('⚠️ Rooms array is invalid, resetting...');
     rooms = [];
   } else {
     rooms = rooms.filter(room => 
@@ -221,7 +320,7 @@ function validateAndRepairData() {
   }
   
   if (!lessons || !Array.isArray(lessons)) {
-    console.warn('Lessons array is invalid, resetting...');
+    console.warn('⚠️ Lessons array is invalid, resetting...');
     lessons = [];
   } else {
     lessons = lessons.filter(lesson => {
@@ -239,7 +338,7 @@ function validateAndRepairData() {
     });
   }
   
-  console.log('ตรวจสอบและซ่อมแซมข้อมูลสำเร็จ:', {
+  console.log('✅ ตรวจสอบและซ่อมแซมข้อมูลสำเร็จ:', {
     teachers: teachers.length,
     classes: classes.length,
     subjects: subjects.length,
@@ -250,7 +349,7 @@ function validateAndRepairData() {
 
 // ฟังก์ชันโหลดจาก Local Storage
 function loadFromLocalStorage() {
-  console.log('Loading data from Local Storage...');
+  console.log('💾 กำลังโหลดข้อมูลจาก Local Storage...');
   
   try {
     teachers = JSON.parse(localStorage.getItem('teachers')) || [];
@@ -262,7 +361,7 @@ function loadFromLocalStorage() {
     validateAndRepairData();
     
     if (teachers.length === 0 && classes.length === 0 && subjects.length === 0 && rooms.length === 0) {
-      console.log('No data found, using sample data...');
+      console.log('📝 ไม่พบข้อมูล, ใช้ข้อมูลตัวอย่าง...');
       teachers = ['ครูสมชาย', 'ครูสมหญิง', 'ครูนิดา'];
       classes = ['ปวช.1/1', 'ปวช.1/2', 'ปวช.2/1'];
       subjects = ['คณิตศาสตร์', 'วิทยาศาสตร์', 'ภาษาอังกฤษ'];
@@ -280,7 +379,7 @@ function loadFromLocalStorage() {
       </div>`;
       
   } catch (error) {
-    console.error('Error loading from Local Storage:', error);
+    console.error('❌ ข้อผิดพลาดในการโหลดข้อมูล Local Storage:', error);
     teachers = ['ครูสมชาย', 'ครูสมหญิง', 'ครูนิดา'];
     classes = ['ปวช.1/1', 'ปวช.1/2', 'ปวช.2/1'];
     subjects = ['คณิตศาสตร์', 'วิทยาศาสตร์', 'ภาษาอังกฤษ'];
@@ -299,10 +398,13 @@ function loadFromLocalStorage() {
 
 // ฟังก์ชันโหลดข้อมูลทั้งหมดจาก Google Sheet
 async function loadAllData() {
+  let loadingShown = false;
+  
   try {
-    showLoading(true);
+    showLoading(true, 'โหลดข้อมูลจาก Google Sheets');
+    loadingShown = true;
     
-    console.log('Starting to load data from Google Sheets...');
+    console.log('📥 เริ่มโหลดข้อมูลจาก Google Sheets...');
     
     const testResult = await testSimpleConnection();
     if (!testResult || !testResult.success) {
@@ -321,7 +423,7 @@ async function loadAllData() {
       validateAndRepairData();
       backupToLocalStorage({ teachers, classes, subjects, rooms, lessons });
       
-      console.log('Successfully loaded from Google Sheets');
+      console.log('✅ โหลดข้อมูลจาก Google Sheets สำเร็จ');
       
       // แสดงสถิติข้อมูล
       const statsHtml = showDataStatistics();
@@ -336,7 +438,7 @@ async function loadAllData() {
       throw new Error(data?.error || 'Failed to load data from server');
     }
   } catch (error) {
-    console.error('Error loading data from Google Sheets:', error);
+    console.error('❌ ข้อผิดพลาดในการโหลดข้อมูลจาก Google Sheets:', error);
     
     loadFromLocalStorage();
     
@@ -352,14 +454,19 @@ async function loadAllData() {
       </div>
       ${statsHtml}`;
   } finally {
-    showLoading(false);
+    if (loadingShown) {
+      showLoading(false, 'โหลดข้อมูลจาก Google Sheets');
+    }
   }
 }
 
-// ฟังก์ชันบันทึกข้อมูลทั้งหมดไปยัง Google Sheet (เวอร์ชันเร็ว)
+// ฟังก์ชันบันทึกข้อมูลทั้งหมดไปยัง Google Sheet (เวอร์ชันป้องกันการติดค้าง)
 async function saveAllData() {
+  let loadingShown = false;
+  
   try {
-    showLoading(true);
+    showLoading(true, 'บันทึกข้อมูลไปยัง Google Sheets');
+    loadingShown = true;
     
     const dataToSave = {
       teachers: teachers || [],
@@ -370,7 +477,7 @@ async function saveAllData() {
     };
     
     const dataSize = JSON.stringify(dataToSave).length;
-    console.log('Saving data to Google Sheets...', {
+    console.log('💾 กำลังบันทึกข้อมูลไปยัง Google Sheets...', {
       teachers: dataToSave.teachers.length,
       classes: dataToSave.classes.length,
       subjects: dataToSave.subjects.length,
@@ -397,15 +504,21 @@ async function saveAllData() {
       action = 'saveAllData';
     }
     
-    console.log(`Using action: ${action} for data size: ${dataSize} bytes`);
+    console.log(`🎯 ใช้ action: ${action} สำหรับข้อมูลขนาด: ${dataSize} bytes`);
     
-    const result = await callGoogleAppsScript(action, dataToSave);
+    // ตั้งค่า timeout สำหรับการบันทึก
+    const savePromise = callGoogleAppsScript(action, dataToSave);
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('การบันทึกข้อมูลใช้เวลานานเกินไป (เกิน 30 วินาที)')), 30000);
+    });
+    
+    const result = await Promise.race([savePromise, timeoutPromise]);
     
     if (result && result.success) {
       backupToLocalStorage(dataToSave);
       
       const timeMsg = result.executionTime ? ` ใน ${result.executionTime} วินาที` : '';
-      console.log('Successfully saved to Google Sheets' + timeMsg);
+      console.log('✅ บันทึกข้อมูลลง Google Sheets สำเร็จ' + timeMsg);
       document.getElementById('message').innerHTML = 
         `<div style="color:green;">
           ✅ บันทึกข้อมูลลง Google Sheets สำเร็จ${timeMsg}<br>
@@ -417,7 +530,7 @@ async function saveAllData() {
       throw new Error(result?.error || 'Failed to save data to Google Sheets');
     }
   } catch (error) {
-    console.error('Error saving data to Google Sheets:', error);
+    console.error('❌ ข้อผิดพลาดในการบันทึกข้อมูลไปยัง Google Sheets:', error);
     
     // บันทึกลง Local Storage เป็น fallback
     backupToLocalStorage({ 
@@ -434,18 +547,22 @@ async function saveAllData() {
         <small>${error.message}</small>
         <br><br>
         <strong>สาเหตุที่อาจเกิดขึ้น:</strong><br>
-        • ข้อมูลมีขนาดใหญ่เกินไปสำหรับการส่งผ่าน JSONP<br>
+        • ข้อมูลมีขนาดใหญ่เกินไปสำหรับการส่งผ่าน<br>
         • การเชื่อมต่ออินเทอร์เน็ตมีปัญหา<br>
         • Google Apps Script เกินโควต้า<br>
+        • การบันทึกใช้เวลานานเกินไป<br>
         <br>
         <strong>คำแนะนำ:</strong><br>
         • ข้อมูลถูกบันทึกในเบราว์เซอร์แล้ว<br>
-        • สามารถส่งข้อมูลไป Google Sheets ได้ภายหลังโดยแบ่งข้อมูลเป็นชุดเล็กๆ<br>
+        • สามารถส่งข้อมูลไป Google Sheets ได้ภายหลัง<br>
         • หรือใช้ปุ่ม "ส่งข้อมูลไป Google Sheets" เมื่อการเชื่อมต่อดีขึ้น
       </div>`;
     return false;
   } finally {
-    showLoading(false);
+    // รับประกันว่าจะซ่อน loading ไม่ว่ากรณีใดๆ
+    if (loadingShown) {
+      showLoading(false, 'บันทึกข้อมูลไปยัง Google Sheets');
+    }
   }
 }
 
@@ -457,7 +574,7 @@ function backupToLocalStorage(data) {
   if (data.rooms) localStorage.setItem('rooms', JSON.stringify(data.rooms));
   if (data.lessons) localStorage.setItem('lessons', JSON.stringify(data.lessons));
   
-  console.log('Data backed up to Local Storage');
+  console.log('💾 สำรองข้อมูลลง Local Storage สำเร็จ');
 }
 
 // =============================================
@@ -468,8 +585,11 @@ function backupToLocalStorage(data) {
 async function exportToGoogleSheets() {
   if (preventGuestAction("ส่งข้อมูลไปยัง Google Sheets")) return;
   
+  let loadingShown = false;
+  
   try {
-    showLoading(true);
+    showLoading(true, 'ส่งข้อมูลไปยัง Google Sheets');
+    loadingShown = true;
     
     const exportData = {
       teachers: teachers,
@@ -479,7 +599,7 @@ async function exportToGoogleSheets() {
       lessons: lessons
     };
     
-    console.log('Exporting data to Google Sheets...', {
+    console.log('📤 กำลังส่งข้อมูลไปยัง Google Sheets...', {
       teachers: teachers.length,
       classes: classes.length,
       subjects: subjects.length,
@@ -500,14 +620,16 @@ async function exportToGoogleSheets() {
       throw new Error(result?.error || 'Failed to export to Google Sheets');
     }
   } catch (error) {
-    console.error('Error exporting to Google Sheets:', error);
+    console.error('❌ ข้อผิดพลาดในการส่งข้อมูลไปยัง Google Sheets:', error);
     document.getElementById('message').innerHTML = 
       `<div style="color:orange;">
         📱 บันทึกข้อมูลลง Local Storage (ทำงานในโหมดออฟไลน์)<br>
         <small>${error.message}</small>
       </div>`;
   } finally {
-    showLoading(false);
+    if (loadingShown) {
+      showLoading(false, 'ส่งข้อมูลไปยัง Google Sheets');
+    }
   }
 }
 
@@ -515,10 +637,13 @@ async function exportToGoogleSheets() {
 async function importFromGoogleSheets() {
   if (preventGuestAction("นำเข้าข้อมูลจาก Google Sheets")) return;
   
+  let loadingShown = false;
+  
   try {
-    showLoading(true);
+    showLoading(true, 'นำเข้าข้อมูลจาก Google Sheets');
+    loadingShown = true;
     
-    console.log('Importing data from Google Sheets...');
+    console.log('📥 กำลังนำเข้าข้อมูลจาก Google Sheets...');
     const result = await callGoogleAppsScript('importFromSheets');
     
     if (result && result.success) {
@@ -544,28 +669,22 @@ async function importFromGoogleSheets() {
       throw new Error(result?.error || 'Failed to import from Google Sheets');
     }
   } catch (error) {
-    console.error('Error importing from Google Sheets:', error);
+    console.error('❌ ข้อผิดพลาดในการนำเข้าข้อมูลจาก Google Sheets:', error);
     document.getElementById('message').innerHTML = 
       `<div style="color:red;">
         ❌ เกิดข้อผิดพลาดในการนำเข้าข้อมูล<br>
         <small>${error.message}</small>
       </div>`;
   } finally {
-    showLoading(false);
+    if (loadingShown) {
+      showLoading(false, 'นำเข้าข้อมูลจาก Google Sheets');
+    }
   }
 }
 
 // =============================================
 // ฟังก์ชันจัดการระบบล็อกอิน
 // =============================================
-
-// ฟังก์ชันแสดง/ซ่อน loading
-function showLoading(show) {
-  const loadingElement = document.getElementById('loading');
-  if (loadingElement) {
-    loadingElement.style.display = show ? 'flex' : 'none';
-  }
-}
 
 // ฟังก์ชันแสดง/ซ่อนส่วนล็อกอิน
 function showLoginModal() {
@@ -1336,8 +1455,11 @@ function renderList() {
 
 // ฟังก์ชันโหลดข้อมูลทั้งหมด (เมื่อผู้ใช้ต้องการเห็นทั้งหมด)
 async function loadAllLessons() {
+  let loadingShown = false;
+  
   try {
-    showLoading(true);
+    showLoading(true, 'โหลดข้อมูลทั้งหมด');
+    loadingShown = true;
     
     // โหลดข้อมูลทั้งหมดจากเซิร์ฟเวอร์ใหม่
     await loadAllData();
@@ -1365,11 +1487,13 @@ async function loadAllLessons() {
       '<div style="color:green;">✅ โหลดข้อมูลทั้งหมดเรียบร้อยแล้ว</div>';
       
   } catch (error) {
-    console.error('Error loading all lessons:', error);
+    console.error('❌ ข้อผิดพลาดในการโหลดข้อมูลทั้งหมด:', error);
     document.getElementById('message').innerHTML = 
       '<div style="color:red;">❌ เกิดข้อผิดพลาดในการโหลดข้อมูลทั้งหมด</div>';
   } finally {
-    showLoading(false);
+    if (loadingShown) {
+      showLoading(false, 'โหลดข้อมูลทั้งหมด');
+    }
   }
 }
 
@@ -2029,14 +2153,17 @@ function cleanImportedData(data) {
 
 // ฟังก์ชันนำเข้าข้อมูลจาก JSON
 async function importJSON(file) {
-  console.log('เริ่มนำเข้าไฟล์ JSON:', file.name);
+  console.log('📁 เริ่มนำเข้าไฟล์ JSON:', file.name);
   
   const reader = new FileReader();
   
   reader.onload = async function(e) {
+    let loadingShown = false;
+    
     try {
-      showLoading(true);
-      console.log('กำลังอ่านไฟล์...');
+      showLoading(true, 'นำเข้าไฟล์ JSON');
+      loadingShown = true;
+      console.log('📖 กำลังอ่านไฟล์...');
       
       if (!e.target.result) {
         throw new Error('ไฟล์ว่างเปล่า');
@@ -2045,14 +2172,14 @@ async function importJSON(file) {
       let rawData;
       try {
         rawData = JSON.parse(e.target.result);
-        console.log('Parse JSON สำเร็จ', Object.keys(rawData));
+        console.log('✅ Parse JSON สำเร็จ', Object.keys(rawData));
       } catch (parseError) {
-        console.error('Error parsing JSON:', parseError);
+        console.error('❌ ข้อผิดพลาดในการ parse JSON:', parseError);
         throw new Error('รูปแบบไฟล์ JSON ไม่ถูกต้อง: ' + parseError.message);
       }
       
       const data = cleanImportedData(rawData);
-      console.log('ข้อมูลหลังจากทำความสะอาด:', {
+      console.log('🧹 ข้อมูลหลังจากทำความสะอาด:', {
         teachers: data.teachers?.length,
         classes: data.classes?.length,
         subjects: data.subjects?.length,
@@ -2061,7 +2188,7 @@ async function importJSON(file) {
       });
       
       if (!data.teachers || !data.classes || !data.subjects || !data.rooms || !data.lessons) {
-        console.error('โครงสร้างไฟล์ไม่ครบ:', {
+        console.error('❌ โครงสร้างไฟล์ไม่ครบ:', {
           teachers: !!data.teachers,
           classes: !!data.classes,
           subjects: !!data.subjects,
@@ -2079,10 +2206,10 @@ async function importJSON(file) {
         lessons: data.lessons.length
       };
       
-      console.log('สถิติข้อมูลที่จะนำเข้า:', stats);
+      console.log('📊 สถิติข้อมูลที่จะนำเข้า:', stats);
       
       if (!confirm(`การนำเข้าข้อมูลจะทับข้อมูลปัจจุบันทั้งหมด\n\nข้อมูลที่จะนำเข้า:\n• ครู: ${stats.teachers} ท่าน\n• ชั้นเรียน: ${stats.classes} ห้อง\n• วิชา: ${stats.subjects} รายการ\n• ห้อง: ${stats.rooms} ห้อง\n• ตารางเรียน: ${stats.lessons} คาบ\n\nต้องการดำเนินการต่อหรือไม่?`)) {
-        showLoading(false);
+        showLoading(false, 'นำเข้าไฟล์ JSON');
         return;
       }
       
@@ -2092,20 +2219,20 @@ async function importJSON(file) {
       rooms = data.rooms;
       lessons = data.lessons;
       
-      console.log('อัพเดทข้อมูลในตัวแปรสำเร็จ');
+      console.log('✅ อัพเดทข้อมูลในตัวแปรสำเร็จ');
       
       backupToLocalStorage({ teachers, classes, subjects, rooms, lessons });
-      console.log('บันทึกลง Local Storage สำเร็จ');
+      console.log('💾 บันทึกลง Local Storage สำเร็จ');
       
       let saveResult = false;
       let saveError = null;
       
       try {
-        console.log('กำลังบันทึกลง Google Sheets...');
+        console.log('🌐 กำลังบันทึกลง Google Sheets...');
         saveResult = await saveAllData();
-        console.log('ผลการบันทึก Google Sheets:', saveResult);
+        console.log('✅ ผลการบันทึก Google Sheets:', saveResult);
       } catch (error) {
-        console.error('Error saving to Google Sheets:', error);
+        console.error('❌ ข้อผิดพลาดในการบันทึกลง Google Sheets:', error);
         saveError = error;
         saveResult = false;
       }
@@ -2128,13 +2255,13 @@ async function importJSON(file) {
             <br><br>
             <strong>คำแนะนำ:</strong><br>
             • ข้อมูลถูกบันทึกในเบราว์เซอร์แล้ว<br>
-            • สามารถส่งข้อมูลไป Google Sheets ได้ภายหลังโดยคลิกปุ่ม "ส่งข้อมูลไป Google Sheets"<br>
+            • สามารถส่งข้อมูลไป Google Sheets ได้ภายหลัง<br>
             • หรือใช้ปุ่ม "ทดสอบการเชื่อมต่อ" เพื่อตรวจสอบการเชื่อมต่อ
           </div>`;
       }
       
     } catch (error) {
-      console.error('Error in importJSON:', error);
+      console.error('❌ ข้อผิดพลาดใน importJSON:', error);
       document.getElementById('message').innerHTML = 
         `<div style="color:red;">
           ❌ เกิดข้อผิดพลาดในการนำเข้าไฟล์ JSON<br>
@@ -2142,13 +2269,15 @@ async function importJSON(file) {
           <small>กรุณาตรวจสอบว่าไฟล์มีรูปแบบที่ถูกต้องและไม่เสียหาย</small>
         </div>`;
     } finally {
-      showLoading(false);
+      if (loadingShown) {
+        showLoading(false, 'นำเข้าไฟล์ JSON');
+      }
     }
   };
   
   reader.onerror = function(error) {
-    console.error('File read error:', error);
-    showLoading(false);
+    console.error('❌ ข้อผิดพลาดในการอ่านไฟล์:', error);
+    showLoading(false, 'นำเข้าไฟล์ JSON');
     document.getElementById('message').innerHTML = 
       `<div style="color:red;">
         ❌ เกิดข้อผิดพลาดในการอ่านไฟล์<br>
@@ -2203,8 +2332,11 @@ async function clearAllData() {
     return;
   }
   
+  let loadingShown = false;
+  
   try {
-    showLoading(true);
+    showLoading(true, 'ล้างข้อมูลทั้งหมด');
+    loadingShown = true;
     
     teachers = [];
     classes = [];
@@ -2220,11 +2352,13 @@ async function clearAllData() {
       '<div style="color:green;">✅ ล้างข้อมูลทั้งหมดเรียบร้อยแล้ว</div>';
       
   } catch (error) {
-    console.error('Error clearing data:', error);
+    console.error('❌ ข้อผิดพลาดในการล้างข้อมูล:', error);
     document.getElementById('message').innerHTML = 
       `<div style="color:red;">❌ เกิดข้อผิดพลาดในการล้างข้อมูล</div>`;
   } finally {
-    showLoading(false);
+    if (loadingShown) {
+      showLoading(false, 'ล้างข้อมูลทั้งหมด');
+    }
   }
 }
 
@@ -2314,8 +2448,11 @@ function showStatistics() {
 async function saveDataInChunks() {
   if (preventGuestAction("ส่งข้อมูลแบบแบ่งชุด")) return;
   
+  let loadingShown = false;
+  
   try {
-    showLoading(true);
+    showLoading(true, 'ส่งข้อมูลแบบแบ่งชุด');
+    loadingShown = true;
     
     const CHUNK_SIZE = 50; // ลดขนาดชุดข้อมูลเพื่อป้องกันปัญหา
     
@@ -2329,10 +2466,10 @@ async function saveDataInChunks() {
         try {
           await callGoogleAppsScript('saveAllData', { teachers: chunk });
           successCount++;
-          console.log(`Saved teachers chunk ${i / CHUNK_SIZE + 1}`);
+          console.log(`✅ บันทึกชุดครู ${i / CHUNK_SIZE + 1} สำเร็จ`);
         } catch (error) {
           errorCount++;
-          console.error(`Error saving teachers chunk ${i / CHUNK_SIZE + 1}:`, error);
+          console.error(`❌ บันทึกชุดครู ${i / CHUNK_SIZE + 1} ล้มเหลว:`, error);
         }
       }
     }
@@ -2344,10 +2481,10 @@ async function saveDataInChunks() {
         try {
           await callGoogleAppsScript('saveAllData', { classes: chunk });
           successCount++;
-          console.log(`Saved classes chunk ${i / CHUNK_SIZE + 1}`);
+          console.log(`✅ บันทึกชุดชั้นเรียน ${i / CHUNK_SIZE + 1} สำเร็จ`);
         } catch (error) {
           errorCount++;
-          console.error(`Error saving classes chunk ${i / CHUNK_SIZE + 1}:`, error);
+          console.error(`❌ บันทึกชุดชั้นเรียน ${i / CHUNK_SIZE + 1} ล้มเหลว:`, error);
         }
       }
     }
@@ -2359,10 +2496,10 @@ async function saveDataInChunks() {
         try {
           await callGoogleAppsScript('saveAllData', { subjects: chunk });
           successCount++;
-          console.log(`Saved subjects chunk ${i / CHUNK_SIZE + 1}`);
+          console.log(`✅ บันทึกชุดรายวิชา ${i / CHUNK_SIZE + 1} สำเร็จ`);
         } catch (error) {
           errorCount++;
-          console.error(`Error saving subjects chunk ${i / CHUNK_SIZE + 1}:`, error);
+          console.error(`❌ บันทึกชุดรายวิชา ${i / CHUNK_SIZE + 1} ล้มเหลว:`, error);
         }
       }
     }
@@ -2374,10 +2511,10 @@ async function saveDataInChunks() {
         try {
           await callGoogleAppsScript('saveAllData', { rooms: chunk });
           successCount++;
-          console.log(`Saved rooms chunk ${i / CHUNK_SIZE + 1}`);
+          console.log(`✅ บันทึกชุดห้อง ${i / CHUNK_SIZE + 1} สำเร็จ`);
         } catch (error) {
           errorCount++;
-          console.error(`Error saving rooms chunk ${i / CHUNK_SIZE + 1}:`, error);
+          console.error(`❌ บันทึกชุดห้อง ${i / CHUNK_SIZE + 1} ล้มเหลว:`, error);
         }
       }
     }
@@ -2389,10 +2526,10 @@ async function saveDataInChunks() {
         try {
           await callGoogleAppsScript('saveAllData', { lessons: chunk });
           successCount++;
-          console.log(`Saved lessons chunk ${i / CHUNK_SIZE + 1}`);
+          console.log(`✅ บันทึกชุดตารางเรียน ${i / CHUNK_SIZE + 1} สำเร็จ`);
         } catch (error) {
           errorCount++;
-          console.error(`Error saving lessons chunk ${i / CHUNK_SIZE + 1}:`, error);
+          console.error(`❌ บันทึกชุดตารางเรียน ${i / CHUNK_SIZE + 1} ล้มเหลว:`, error);
         }
       }
     }
@@ -2416,14 +2553,16 @@ async function saveDataInChunks() {
     }
     
   } catch (error) {
-    console.error('Error in saveDataInChunks:', error);
+    console.error('❌ ข้อผิดพลาดใน saveDataInChunks:', error);
     document.getElementById('message').innerHTML = 
       `<div style="color:red;">
         ❌ เกิดข้อผิดพลาดในการส่งข้อมูลแบบแบ่งชุด<br>
         <small>${error.message}</small>
       </div>`;
   } finally {
-    showLoading(false);
+    if (loadingShown) {
+      showLoading(false, 'ส่งข้อมูลแบบแบ่งชุด');
+    }
   }
 }
 
@@ -2466,6 +2605,9 @@ window.addEventListener('DOMContentLoaded', function () {
 
   setupFilters();
   setupSummaryTabs();
+
+  // ตรวจสอบสถานะการโหลดทุก 30 วินาที
+  setInterval(checkLoadingStatus, 30000);
 
   console.log('📥 กำลังโหลดข้อมูลเริ่มต้น...');
   loadAllData().then(() => {
