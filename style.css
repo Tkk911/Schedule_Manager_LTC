@@ -77,8 +77,10 @@ th{background:#d1fae5}
   padding: 6px 10px;
   font-size: 12px;
 }
+
+/* เพิ่มสไตล์สำหรับข้อมูลจำนวนมาก */
 .data-list {
-  max-height: 100px;
+  max-height: 200px; /* เพิ่มความสูงสำหรับข้อมูลจำนวนมาก */
   overflow-y: auto;
   border: 1px solid #d1fae5;
   border-radius: 4px;
@@ -86,6 +88,26 @@ th{background:#d1fae5}
   background: white;
   font-size: 12px;
 }
+
+/* สไตล์สำหรับ scrollbar ใน data-list */
+.data-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.data-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.data-list::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.data-list::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
 .data-item {
   display: flex;
   justify-content: space-between;
@@ -100,6 +122,24 @@ th{background:#d1fae5}
   padding: 2px 6px;
   font-size: 10px;
   margin-left: 4px;
+}
+
+/* สไตล์สำหรับตารางที่มีข้อมูลจำนวนมาก */
+#lessonTable {
+  position: relative;
+}
+
+#lessonTable tbody {
+  max-height: 500px;
+  overflow-y: auto;
+  display: block;
+}
+
+#lessonTable thead,
+#lessonTable tbody tr {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
 }
 
 /* Modal Styles */
@@ -363,11 +403,79 @@ th{background:#d1fae5}
   100% { transform: rotate(360deg); }
 }
 
-/* ปรับปรุงปุ่มสำหรับ Google Sheets */
-#controls .btn-primary,
-#controls .btn-secondary {
+/* สไตล์สำหรับการแสดงผลความคืบหน้า */
+.loading-progress {
+  margin-top: 10px;
+  text-align: center;
+  font-size: 14px;
+  color: #666;
+}
+
+/* สไตล์สำหรับข้อความเตือนข้อมูลจำนวนมาก */
+.large-data-warning {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 6px;
+  padding: 10px;
+  margin: 10px 0;
+  color: #856404;
+  font-size: 14px;
+}
+
+/* สไตล์สำหรับ dropdown ที่มีข้อมูลจำนวนมาก */
+select {
+  max-height: 200px;
+}
+
+/* สไตล์สำหรับการแสดงสถิติ */
+.data-statistics {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 15px;
+  margin: 15px 0;
+  border: 1px solid #e9ecef;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.stat-item {
+  background: white;
+  padding: 10px;
+  border-radius: 6px;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.stat-number {
+  font-size: 24px;
+  font-weight: bold;
+  color: #10b981;
+  margin-bottom: 5px;
+}
+
+.stat-label {
   font-size: 12px;
-  padding: 6px 10px;
+  color: #6c757d;
+}
+
+/* ปรับปรุงการแสดงผลสำหรับมือถือ */
+@media (max-width: 768px) {
+  .data-list {
+    max-height: 150px;
+  }
+  
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  #lessonTable {
+    font-size: 12px;
+  }
 }
 
 @media print {
