@@ -2,7 +2,7 @@ const periods = ["คาบ 1 (08:30-09:20)", "คาบ 2 (09:20-10:10)", "ค�
 const days = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร️"];
 
 // URL ของ Google Apps Script
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbzxxpADonGvH4hRCG4i7szaqbIDFyoFYSFVXoroyJYrw2CnftaaFB3qekhw9P69qbckwA/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzgNRWqIWwfJsRzZ1ij8aCvon_dBtB4fxxznL83dOvyToYd_nWKWhqCiqw_gSIlfw1BVg/exec';
 
 let lessons = [];
 let teachers = [];
