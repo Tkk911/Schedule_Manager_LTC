@@ -2,7 +2,7 @@ const periods = ["คาบ 1 (08:30-09:20)", "คาบ 2 (09:20-10:10)", "ค�
 const days = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร️"];
 
 // URL ของ Google Apps Script
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbzgNRWqIWwfJsRzZ1ij8aCvon_dBtB4fxxznL83dOvyToYd_nWKWhqCiqw_gSIlfw1BVg/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbx0M4fHJRXyAsDeHlOJ_zEJ-owQotfTKjHnPtEJ82ZNJt3bTmpGtSC_ck4DWv3BhXiqEQ/exec';
 
 let lessons = [];
 let teachers = [];
@@ -460,12 +460,87 @@ async function loadAllData() {
   }
 }
 
-// ฟังก์ชันบันทึกข้อมูลทั้งหมดไปยัง Google Sheet (เวอร์ชันป้องกันการติดค้าง)
-async function saveAllData() {
+// ฟังก์ชันบันทึกข้อมูลลง Local Storage
+function backupToLocalStorage(data) {
+  if (data.teachers) localStorage.setItem('teachers', JSON.stringify(data.teachers));
+  if (data.classes) localStorage.setItem('classes', JSON.stringify(data.classes));
+  if (data.subjects) localStorage.setItem('subjects', JSON.stringify(data.subjects));
+  if (data.rooms) localStorage.setItem('rooms', JSON.stringify(data.rooms));
+  if (data.lessons) localStorage.setItem('lessons', JSON.stringify(data.lessons));
+  
+  console.log('💾 สำรองข้อมูลลง Local Storage สำเร็จ');
+}
+
+// =============================================
+// ฟังก์ชันบันทึกข้อมูลแบบใหม่ - เพิ่มประสิทธิภาพ
+// =============================================
+
+// ฟังก์ชันบันทึกเฉพาะ lessons ไปยัง Google Sheets
+async function saveLessonsOnly() {
   let loadingShown = false;
   
   try {
-    showLoading(true, 'บันทึกข้อมูลไปยัง Google Sheets');
+    showLoading(true, 'บันทึกข้อมูลตารางเรียน');
+    loadingShown = true;
+    
+    console.log('💾 กำลังบันทึกข้อมูลตารางเรียน...', {
+      lessons: lessons.length
+    });
+    
+    if (lessons.length === 0) {
+      throw new Error('ไม่มีข้อมูลตารางเรียนที่จะบันทึก');
+    }
+    
+    // ใช้วิธีบันทึกแบบเร็วสำหรับ lessons เท่านั้น
+    const result = await callGoogleAppsScript('saveLessonsOnly', { lessons });
+    
+    if (result && result.success) {
+      backupToLocalStorage({ lessons });
+      
+      const timeMsg = result.executionTime ? ` ใน ${result.executionTime} วินาที` : '';
+      console.log('✅ บันทึกข้อมูลตารางเรียนสำเร็จ' + timeMsg);
+      document.getElementById('message').innerHTML = 
+        `<div style="color:green;">
+          ✅ บันทึกข้อมูลตารางเรียนสำเร็จ${timeMsg}<br>
+          <small>${result.message || 'บันทึกข้อมูลตารางเรียนเรียบร้อย'}</small>
+          ${result.stats ? `<br><small>ตารางเรียน: ${result.stats.lessons || 0} คาบ</small>` : ''}
+        </div>`;
+      return true;
+    } else {
+      throw new Error(result?.error || 'Failed to save lessons to Google Sheets');
+    }
+  } catch (error) {
+    console.error('❌ ข้อผิดพลาดในการบันทึกข้อมูลตารางเรียน:', error);
+    
+    // บันทึกลง Local Storage เป็น fallback
+    backupToLocalStorage({ lessons });
+    
+    document.getElementById('message').innerHTML = 
+      `<div style="color:orange;">
+        📱 บันทึกข้อมูลตารางเรียนลง Local Storage<br>
+        <small>${error.message}</small>
+        <br>
+        <button onclick="retrySaveLessons()" class="btn-primary small" style="margin-top: 5px;">ลองบันทึกอีกครั้ง</button>
+      </div>`;
+    return false;
+  } finally {
+    if (loadingShown) {
+      showLoading(false, 'บันทึกข้อมูลตารางเรียน');
+    }
+  }
+}
+
+// ฟังก์ชันลองบันทึกอีกครั้ง
+async function retrySaveLessons() {
+  await saveLessonsOnly();
+}
+
+// ฟังก์ชันบันทึกข้อมูลทั้งหมดแบบปรับปรุง
+async function saveAllDataOptimized() {
+  let loadingShown = false;
+  
+  try {
+    showLoading(true, 'บันทึกข้อมูลทั้งหมดแบบเร็ว');
     loadingShown = true;
     
     const dataToSave = {
@@ -476,52 +551,25 @@ async function saveAllData() {
       lessons: lessons || []
     };
     
-    const dataSize = JSON.stringify(dataToSave).length;
-    console.log('💾 กำลังบันทึกข้อมูลไปยัง Google Sheets...', {
+    console.log('🚀 กำลังบันทึกข้อมูลทั้งหมดแบบเร็ว...', {
       teachers: dataToSave.teachers.length,
       classes: dataToSave.classes.length,
       subjects: dataToSave.subjects.length,
       rooms: dataToSave.rooms.length,
-      lessons: dataToSave.lessons.length,
-      totalSize: dataSize + ' bytes'
+      lessons: dataToSave.lessons.length
     });
     
-    if (dataToSave.teachers.length === 0 && 
-        dataToSave.classes.length === 0 && 
-        dataToSave.subjects.length === 0 && 
-        dataToSave.rooms.length === 0 && 
-        dataToSave.lessons.length === 0) {
-      throw new Error('ไม่มีข้อมูลที่จะบันทึก');
-    }
-    
-    // เลือกวิธีบันทึกตามขนาดข้อมูลเพื่อความเร็ว
-    let action;
-    if (dataSize > 100000) { // ข้อมูลใหญ่มาก
-      action = 'saveLargeData';
-    } else if (dataSize > 50000) { // ข้อมูลขนาดกลาง
-      action = 'saveAllDataFast';
-    } else { // ข้อมูลขนาดเล็ก
-      action = 'saveAllData';
-    }
-    
-    console.log(`🎯 ใช้ action: ${action} สำหรับข้อมูลขนาด: ${dataSize} bytes`);
-    
-    // ตั้งค่า timeout สำหรับการบันทึก
-    const savePromise = callGoogleAppsScript(action, dataToSave);
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('การบันทึกข้อมูลใช้เวลานานเกินไป (เกิน 30 วินาที)')), 30000);
-    });
-    
-    const result = await Promise.race([savePromise, timeoutPromise]);
+    // ใช้วิธีบันทึกแบบเร็ว
+    const result = await callGoogleAppsScript('saveAllDataFast', dataToSave);
     
     if (result && result.success) {
       backupToLocalStorage(dataToSave);
       
       const timeMsg = result.executionTime ? ` ใน ${result.executionTime} วินาที` : '';
-      console.log('✅ บันทึกข้อมูลลง Google Sheets สำเร็จ' + timeMsg);
+      console.log('✅ บันทึกข้อมูลทั้งหมดสำเร็จ' + timeMsg);
       document.getElementById('message').innerHTML = 
         `<div style="color:green;">
-          ✅ บันทึกข้อมูลลง Google Sheets สำเร็จ${timeMsg}<br>
+          ✅ บันทึกข้อมูลทั้งหมดสำเร็จ${timeMsg}<br>
           <small>${result.message || 'บันทึกข้อมูลเรียบร้อย'}</small>
           ${result.stats ? `<br><small>ครู: ${result.stats.teachers || 0} | วิชา: ${result.stats.subjects || 0} | ตารางเรียน: ${result.stats.lessons || 0}</small>` : ''}
         </div>`;
@@ -530,51 +578,35 @@ async function saveAllData() {
       throw new Error(result?.error || 'Failed to save data to Google Sheets');
     }
   } catch (error) {
-    console.error('❌ ข้อผิดพลาดในการบันทึกข้อมูลไปยัง Google Sheets:', error);
+    console.error('❌ ข้อผิดพลาดในการบันทึกข้อมูลทั้งหมด:', error);
     
-    // บันทึกลง Local Storage เป็น fallback
-    backupToLocalStorage({ 
-      teachers: teachers || [], 
-      classes: classes || [], 
-      subjects: subjects || [], 
-      rooms: rooms || [], 
-      lessons: lessons || [] 
-    });
+    // ลองบันทึกเฉพาะ lessons เป็น fallback
+    console.log('🔄 ลองบันทึกเฉพาะตารางเรียน...');
+    const lessonsResult = await saveLessonsOnly();
     
-    document.getElementById('message').innerHTML = 
-      `<div style="color:orange;">
-        📱 บันทึกข้อมูลลง Local Storage (ทำงานในโหมดออฟไลน์)<br>
-        <small>${error.message}</small>
-        <br><br>
-        <strong>สาเหตุที่อาจเกิดขึ้น:</strong><br>
-        • ข้อมูลมีขนาดใหญ่เกินไปสำหรับการส่งผ่าน<br>
-        • การเชื่อมต่ออินเทอร์เน็ตมีปัญหา<br>
-        • Google Apps Script เกินโควต้า<br>
-        • การบันทึกใช้เวลานานเกินไป<br>
-        <br>
-        <strong>คำแนะนำ:</strong><br>
-        • ข้อมูลถูกบันทึกในเบราว์เซอร์แล้ว<br>
-        • สามารถส่งข้อมูลไป Google Sheets ได้ภายหลัง<br>
-        • หรือใช้ปุ่ม "ส่งข้อมูลไป Google Sheets" เมื่อการเชื่อมต่อดีขึ้น
-      </div>`;
-    return false;
+    if (!lessonsResult) {
+      backupToLocalStorage({ 
+        teachers, classes, subjects, rooms, lessons 
+      });
+      
+      document.getElementById('message').innerHTML = 
+        `<div style="color:orange;">
+          📱 บันทึกข้อมูลลง Local Storage (ทำงานในโหมดออฟไลน์)<br>
+          <small>${error.message}</small>
+        </div>`;
+    }
+    
+    return lessonsResult;
   } finally {
-    // รับประกันว่าจะซ่อน loading ไม่ว่ากรณีใดๆ
     if (loadingShown) {
-      showLoading(false, 'บันทึกข้อมูลไปยัง Google Sheets');
+      showLoading(false, 'บันทึกข้อมูลทั้งหมดแบบเร็ว');
     }
   }
 }
 
-// ฟังก์ชันบันทึกข้อมูลลง Local Storage
-function backupToLocalStorage(data) {
-  if (data.teachers) localStorage.setItem('teachers', JSON.stringify(data.teachers));
-  if (data.classes) localStorage.setItem('classes', JSON.stringify(data.classes));
-  if (data.subjects) localStorage.setItem('subjects', JSON.stringify(data.subjects));
-  if (data.rooms) localStorage.setItem('rooms', JSON.stringify(data.rooms));
-  if (data.lessons) localStorage.setItem('lessons', JSON.stringify(data.lessons));
-  
-  console.log('💾 สำรองข้อมูลลง Local Storage สำเร็จ');
+// ฟังก์ชันบันทึกข้อมูลทั้งหมดไปยัง Google Sheet (เวอร์ชันเดิม - ใช้สำหรับ compatibility)
+async function saveAllData() {
+  return await saveAllDataOptimized();
 }
 
 // =============================================
@@ -1046,7 +1078,7 @@ document.getElementById('addTeacher').onclick = async () => {
   const newTeacher = document.getElementById('newTeacher').value.trim();
   if (newTeacher && !teachers.includes(newTeacher)) {
     teachers.push(newTeacher);
-    await saveAllData();
+    await saveAllDataOptimized();
     loadDropdowns();
     document.getElementById('newTeacher').value = '';
     document.getElementById('message').innerHTML = '<div style="color:green;">✅ เพิ่มอาจารย์เรียบร้อยแล้ว</div>';
@@ -1063,7 +1095,7 @@ document.getElementById('addClass').onclick = async () => {
   const newClass = document.getElementById('newClass').value.trim();
   if (newClass && !classes.includes(newClass)) {
     classes.push(newClass);
-    await saveAllData();
+    await saveAllDataOptimized();
     loadDropdowns();
     document.getElementById('newClass').value = '';
     document.getElementById('message').innerHTML = '<div style="color:green;">✅ เพิ่มชั้นเรียนเรียบร้อยแล้ว</div>';
@@ -1080,7 +1112,7 @@ document.getElementById('addSubject').onclick = async () => {
   const newSubject = document.getElementById('newSubject').value.trim();
   if (newSubject && !subjects.includes(newSubject)) {
     subjects.push(newSubject);
-    await saveAllData();
+    await saveAllDataOptimized();
     loadDropdowns();
     document.getElementById('newSubject').value = '';
     document.getElementById('message').innerHTML = '<div style="color:green;">✅ เพิ่มรายวิชาเรียบร้อยแล้ว</div>';
@@ -1097,7 +1129,7 @@ document.getElementById('addRoom').onclick = async () => {
   const newRoom = document.getElementById('newRoom').value.trim();
   if (newRoom && !rooms.includes(newRoom)) {
     rooms.push(newRoom);
-    await saveAllData();
+    await saveAllDataOptimized();
     loadDropdowns();
     document.getElementById('newRoom').value = '';
     document.getElementById('message').innerHTML = '<div style="color:green;">✅ เพิ่มห้องเรียบร้อยแล้ว</div>';
@@ -1123,7 +1155,7 @@ async function removeTeacher(index) {
   }
   
   teachers.splice(index, 1);
-  await saveAllData();
+  await saveAllDataOptimized();
   loadDropdowns();
   document.getElementById('message').innerHTML = '<div style="color:green;">✅ ลบอาจารย์เรียบร้อยแล้ว</div>';
 }
@@ -1142,7 +1174,7 @@ async function removeClass(index) {
   }
   
   classes.splice(index, 1);
-  await saveAllData();
+  await saveAllDataOptimized();
   loadDropdowns();
   document.getElementById('message').innerHTML = '<div style="color:green;">✅ ลบชั้นเรียนเรียบร้อยแล้ว</div>';
 }
@@ -1161,7 +1193,7 @@ async function removeSubject(index) {
   }
   
   subjects.splice(index, 1);
-  await saveAllData();
+  await saveAllDataOptimized();
   loadDropdowns();
   document.getElementById('message').innerHTML = '<div style="color:green;">✅ ลบรายวิชาเรียบร้อยแล้ว</div>';
 }
@@ -1180,7 +1212,7 @@ async function removeRoom(index) {
   }
   
   rooms.splice(index, 1);
-  await saveAllData();
+  await saveAllDataOptimized();
   loadDropdowns();
   document.getElementById('message').innerHTML = '<div style="color:green;">✅ ลบห้องเรียบร้อยแล้ว</div>';
 }
@@ -1300,7 +1332,7 @@ document.getElementById('saveEditBtn').onclick = async function() {
     });
   }
   
-  await saveAllData();
+  await saveAllDataOptimized();
   loadDropdowns();
   renderAll();
   
@@ -1514,7 +1546,7 @@ function addTableEventListeners() {
     if (preventGuestAction("ลบรายการสอน")) return;
     if (confirm('คุณแน่ใจว่าต้องการลบรายการสอนนี้?')) {
       lessons = lessons.filter(x => x.id !== b.dataset.id);
-      await saveAllData();
+      await saveLessonsOnly();
       renderAll();
       updateFilterOptions();
     }
@@ -1872,7 +1904,7 @@ lessonForm.onsubmit = async e => {
     document.getElementById('message').innerHTML = '<div style="color:green;">✅ บันทึกรายการสอนเรียบร้อยแล้ว</div>';
   }
 
-  await saveAllData();
+  await saveLessonsOnly();
   e.target.reset();
   renderAll();
   updateFilterOptions();
@@ -1899,7 +1931,7 @@ autoBtn.onclick = async () => {
 
   const success = autoSchedule(nl, numPeriods);
   if (success) {
-    await saveAllData();
+    await saveLessonsOnly();
   }
   lessonForm.reset();
 
@@ -2229,7 +2261,7 @@ async function importJSON(file) {
       
       try {
         console.log('🌐 กำลังบันทึกลง Google Sheets...');
-        saveResult = await saveAllData();
+        saveResult = await saveAllDataOptimized();
         console.log('✅ ผลการบันทึก Google Sheets:', saveResult);
       } catch (error) {
         console.error('❌ ข้อผิดพลาดในการบันทึกลง Google Sheets:', error);
@@ -2344,7 +2376,7 @@ async function clearAllData() {
     rooms = [];
     lessons = [];
     
-    await saveAllData();
+    await saveAllDataOptimized();
     loadDropdowns();
     renderAll();
     
@@ -2587,6 +2619,10 @@ document.getElementById('importFromSheetsBtn').onclick = importFromGoogleSheets;
 document.getElementById('testConnectionBtn').onclick = testSimpleConnection;
 document.getElementById('clearDataBtn').onclick = clearAllData;
 document.getElementById('debugBtn').onclick = debugData;
+
+// เพิ่ม Event Listeners สำหรับปุ่มใหม่
+document.getElementById('saveLessonsBtn').onclick = saveLessonsOnly;
+document.getElementById('saveAllFastBtn').onclick = saveAllDataOptimized;
 
 // เมื่อโหลดหน้าเว็บเสร็จ
 window.addEventListener('DOMContentLoaded', function () {
