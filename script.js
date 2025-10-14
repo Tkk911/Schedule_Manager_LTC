@@ -2,7 +2,7 @@ const periods = ["คาบ 1 (08:30-09:20)", "คาบ 2 (09:20-10:10)", "ค�
 const days = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร️"];
 
 // URL ของ Google Apps Script
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbx0M4fHJRXyAsDeHlOJ_zEJ-owQotfTKjHnPtEJ82ZNJt3bTmpGtSC_ck4DWv3BhXiqEQ/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwJgrqS5oiMbBK9fa0MDBnL9eunL7Hi5oJQoALFbK9-ZQbyNZcT0pgUQSwLsg4aBKhRMw/exec';
 
 let lessons = [];
 let teachers = [];
@@ -33,6 +33,12 @@ const ADMIN_PASSWORD = "admin452026";
 // ตัวแปรจัดการ loading
 let loadingTimeoutId = null;
 let currentLoadingOperation = null;
+
+// ตัวแปรสำหรับจัดการการแบ่งหน้า
+let currentPage = 1;
+let pageSize = 100;
+let totalPages = 1;
+let filteredLessons = [];
 
 // =============================================
 // ฟังก์ชันจัดการ Loading (แก้ไขแล้ว)
@@ -326,7 +332,7 @@ function validateAndRepairData() {
     lessons = lessons.filter(lesson => {
       if (!lesson || typeof lesson !== 'object') return false;
       
-      lesson.id = lesson.id || uid();
+      lesson.id = lesson.id || generateId();
       lesson.teacher = lesson.teacher || '';
       lesson.subject = lesson.subject || '';
       lesson.classLevel = lesson.classLevel || '';
@@ -345,6 +351,11 @@ function validateAndRepairData() {
     rooms: rooms.length,
     lessons: lessons.length
   });
+}
+
+// ฟังก์ชันสร้าง ID
+function generateId() {
+  return Date.now().toString() + Math.random().toString(16).slice(2);
 }
 
 // ฟังก์ชันโหลดจาก Local Storage
@@ -475,6 +486,29 @@ function backupToLocalStorage(data) {
 // ฟังก์ชันบันทึกข้อมูลแบบใหม่ - เพิ่มประสิทธิภาพ
 // =============================================
 
+// ฟังก์ชันตรวจสอบข้อมูลก่อนบันทึก
+function validateLessonsBeforeSave() {
+  console.log('🔍 กำลังตรวจสอบข้อมูลก่อนบันทึก...');
+  
+  const validLessons = lessons.filter(lesson => {
+    return lesson && 
+           lesson.id && 
+           lesson.teacher && 
+           lesson.subject && 
+           lesson.classLevel && 
+           lesson.room &&
+           typeof lesson.day === 'number' &&
+           typeof lesson.period === 'number';
+  });
+  
+  if (validLessons.length !== lessons.length) {
+    console.warn(`⚠️ พบข้อมูลไม่สมบูรณ์: ${lessons.length - validLessons.length} รายการ`);
+    console.log('รายการที่ไม่สมบูรณ์:', lessons.filter(lesson => !validLessons.includes(lesson)));
+  }
+  
+  return validLessons;
+}
+
 // ฟังก์ชันบันทึกเฉพาะ lessons ไปยัง Google Sheets
 async function saveLessonsOnly() {
   let loadingShown = false;
@@ -483,22 +517,30 @@ async function saveLessonsOnly() {
     showLoading(true, 'บันทึกข้อมูลตารางเรียน');
     loadingShown = true;
     
+    // ตรวจสอบข้อมูลก่อนบันทึก
+    const validatedLessons = validateLessonsBeforeSave();
+    
     console.log('💾 กำลังบันทึกข้อมูลตารางเรียน...', {
-      lessons: lessons.length
+      lessons: validatedLessons.length,
+      sample: validatedLessons.slice(0, 5) // แสดงตัวอย่าง 5 รายการแรก
     });
     
-    if (lessons.length === 0) {
+    if (validatedLessons.length === 0) {
       throw new Error('ไม่มีข้อมูลตารางเรียนที่จะบันทึก');
     }
     
     // ใช้วิธีบันทึกแบบเร็วสำหรับ lessons เท่านั้น
-    const result = await callGoogleAppsScript('saveLessonsOnly', { lessons });
+    const result = await callGoogleAppsScript('saveLessonsOnly', { lessons: validatedLessons });
     
     if (result && result.success) {
-      backupToLocalStorage({ lessons });
+      backupToLocalStorage({ lessons: validatedLessons });
       
       const timeMsg = result.executionTime ? ` ใน ${result.executionTime} วินาที` : '';
-      console.log('✅ บันทึกข้อมูลตารางเรียนสำเร็จ' + timeMsg);
+      console.log('✅ บันทึกข้อมูลตารางเรียนสำเร็จ' + timeMsg, {
+        recordsSent: validatedLessons.length,
+        recordsConfirmed: result.stats?.lessons || 'N/A'
+      });
+      
       document.getElementById('message').innerHTML = 
         `<div style="color:green;">
           ✅ บันทึกข้อมูลตารางเรียนสำเร็จ${timeMsg}<br>
@@ -543,12 +585,15 @@ async function saveAllDataOptimized() {
     showLoading(true, 'บันทึกข้อมูลทั้งหมดแบบเร็ว');
     loadingShown = true;
     
+    // ตรวจสอบข้อมูลก่อนบันทึก
+    const validatedLessons = validateLessonsBeforeSave();
+    
     const dataToSave = {
       teachers: teachers || [],
       classes: classes || [],
       subjects: subjects || [],
       rooms: rooms || [],
-      lessons: lessons || []
+      lessons: validatedLessons
     };
     
     console.log('🚀 กำลังบันทึกข้อมูลทั้งหมดแบบเร็ว...', {
@@ -623,12 +668,15 @@ async function exportToGoogleSheets() {
     showLoading(true, 'ส่งข้อมูลไปยัง Google Sheets');
     loadingShown = true;
     
+    // ตรวจสอบข้อมูลก่อนบันทึก
+    const validatedLessons = validateLessonsBeforeSave();
+    
     const exportData = {
       teachers: teachers,
       classes: classes,
       subjects: subjects,
       rooms: rooms,
-      lessons: lessons
+      lessons: validatedLessons
     };
     
     console.log('📤 กำลังส่งข้อมูลไปยัง Google Sheets...', {
@@ -636,7 +684,7 @@ async function exportToGoogleSheets() {
       classes: classes.length,
       subjects: subjects.length,
       rooms: rooms.length,
-      lessons: lessons.length
+      lessons: validatedLessons.length
     });
     
     const result = await callGoogleAppsScript('exportToSheets', exportData);
@@ -1362,10 +1410,6 @@ window.onclick = function(event) {
 // ฟังก์ชันจัดการตารางเรียน
 // =============================================
 
-function uid() {
-  return Date.now().toString() + Math.random().toString(16).slice(2);
-}
-
 function renderAll() {
   renderGrid();
   renderList();
@@ -1411,15 +1455,53 @@ function renderGrid() {
   });
 }
 
+// =============================================
+// ระบบจัดการข้อมูลจำนวนมาก - เพิ่มประสิทธิภาพ
+// =============================================
+
+// ฟังก์ชันจัดการการแบ่งหน้า
+function setupPagination() {
+  document.getElementById('pageSizeSelect').addEventListener('change', function() {
+    pageSize = parseInt(this.value);
+    currentPage = 1;
+    renderList();
+  });
+
+  document.getElementById('firstPageBtn').addEventListener('click', function() {
+    currentPage = 1;
+    renderList();
+  });
+
+  document.getElementById('prevPageBtn').addEventListener('click', function() {
+    if (currentPage > 1) {
+      currentPage--;
+      renderList();
+    }
+  });
+
+  document.getElementById('nextPageBtn').addEventListener('click', function() {
+    if (currentPage < totalPages) {
+      currentPage++;
+      renderList();
+    }
+  });
+
+  document.getElementById('lastPageBtn').addEventListener('click', function() {
+    currentPage = totalPages;
+    renderList();
+  });
+}
+
 // ปรับปรุงฟังก์ชัน renderList สำหรับข้อมูลจำนวนมาก
 function renderList() {
   const tb = document.querySelector('#lessonTable tbody');
   if (!tb) return;
   
-  // ล้างข้อมูลเดิม
+  // ล้างข้อมูลเดิมทั้งหมด
   tb.innerHTML = '';
   
-  let filteredLessons = lessons.filter(lesson => {
+  // กรองข้อมูลตามเงื่อนไข
+  filteredLessons = lessons.filter(lesson => {
     if (currentFilters.subject && lesson.subject !== currentFilters.subject) return false;
     if (currentFilters.teacher && lesson.teacher !== currentFilters.teacher) return false;
     if (currentFilters.classLevel && lesson.classLevel !== currentFilters.classLevel) return false;
@@ -1429,28 +1511,20 @@ function renderList() {
     return true;
   });
   
-  // จำกัดการแสดงผลเพื่อประสิทธิภาพ
-  const displayLimit = 1000;
-  const displayAll = filteredLessons.length <= displayLimit;
-  const lessonsToDisplay = displayAll ? filteredLessons : filteredLessons.slice(0, displayLimit);
-  
-  const tableHeader = document.querySelector('#lessonTable').closest('.card').querySelector('h2');
-  const originalTitle = 'รายการจัดการเรียนทั้งหมด';
-  
-  let titleSuffix = '';
-  if (Object.values(currentFilters).some(filter => filter !== '')) {
-    titleSuffix = ` (${filteredLessons.length} รายการ${!displayAll ? `, แสดง ${displayLimit} รายการแรก` : ''})`;
-  } else if (!displayAll) {
-    titleSuffix = ` (แสดง ${displayLimit} รายการแรกจากทั้งหมด ${filteredLessons.length} รายการ)`;
-  }
-  
-  tableHeader.textContent = originalTitle + titleSuffix;
-  
   // เรียงลำดับข้อมูล
-  lessonsToDisplay.sort((a, b) => {
+  filteredLessons.sort((a, b) => {
     if (a.day !== b.day) return a.day - b.day;
     return a.period - b.period;
   });
+  
+  // คำนวณการแบ่งหน้า
+  totalPages = Math.ceil(filteredLessons.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, filteredLessons.length);
+  const lessonsToDisplay = filteredLessons.slice(startIndex, endIndex);
+  
+  // อัพเดทข้อมูลการแบ่งหน้า
+  updatePaginationInfo();
   
   // เรนเดอร์ข้อมูล
   lessonsToDisplay.forEach(l => {
@@ -1469,63 +1543,45 @@ function renderList() {
     tb.appendChild(tr);
   });
   
-  // เพิ่มข้อความเมื่อมีการจำกัดการแสดงผล
-  if (!displayAll) {
-    const infoRow = document.createElement('tr');
-    infoRow.innerHTML = `
-      <td colspan="7" style="text-align: center; background: #fff3cd; color: #856404; font-style: italic;">
-        ⚠️ แสดง ${displayLimit} รายการแรกจากทั้งหมด ${filteredLessons.length} รายการ 
-        <button class="btn-info small" onclick="loadAllLessons()" style="margin-left: 10px;">โหลดทั้งหมด</button>
-      </td>
-    `;
-    tb.appendChild(infoRow);
-  }
-  
   // เพิ่ม Event listeners
   addTableEventListeners();
 }
 
-// ฟังก์ชันโหลดข้อมูลทั้งหมด (เมื่อผู้ใช้ต้องการเห็นทั้งหมด)
-async function loadAllLessons() {
-  let loadingShown = false;
+// ฟังก์ชันอัพเดทข้อมูลการแบ่งหน้า
+function updatePaginationInfo() {
+  const startIndex = (currentPage - 1) * pageSize + 1;
+  const endIndex = Math.min(currentPage * pageSize, filteredLessons.length);
   
-  try {
-    showLoading(true, 'โหลดข้อมูลทั้งหมด');
-    loadingShown = true;
-    
-    // โหลดข้อมูลทั้งหมดจากเซิร์ฟเวอร์ใหม่
-    await loadAllData();
-    
-    // ล้างฟิลเตอร์และเรนเดอร์ใหม่
-    currentFilters = {
-      subject: '',
-      teacher: '',
-      classLevel: '',
-      room: '',
-      day: '',
-      period: ''
-    };
-    
-    document.getElementById('filterSubject').value = '';
-    document.getElementById('filterTeacher').value = '';
-    document.getElementById('filterClass').value = '';
-    document.getElementById('filterRoom').value = '';
-    document.getElementById('filterDay').value = '';
-    document.getElementById('filterPeriod').value = '';
-    
-    renderList();
-    
-    document.getElementById('message').innerHTML = 
-      '<div style="color:green;">✅ โหลดข้อมูลทั้งหมดเรียบร้อยแล้ว</div>';
-      
-  } catch (error) {
-    console.error('❌ ข้อผิดพลาดในการโหลดข้อมูลทั้งหมด:', error);
-    document.getElementById('message').innerHTML = 
-      '<div style="color:red;">❌ เกิดข้อผิดพลาดในการโหลดข้อมูลทั้งหมด</div>';
-  } finally {
-    if (loadingShown) {
-      showLoading(false, 'โหลดข้อมูลทั้งหมด');
-    }
+  document.getElementById('paginationInfo').textContent = 
+    `แสดง ${startIndex} ถึง ${endIndex} จากทั้งหมด ${filteredLessons.length} รายการ (หน้า ${currentPage} จาก ${totalPages})`;
+  
+  // อัพเดทปุ่มการนำทาง
+  document.getElementById('firstPageBtn').disabled = currentPage === 1;
+  document.getElementById('prevPageBtn').disabled = currentPage === 1;
+  document.getElementById('nextPageBtn').disabled = currentPage === totalPages;
+  document.getElementById('lastPageBtn').disabled = currentPage === totalPages;
+  
+  // สร้างหมายเลขหน้า
+  const pageNumbersElement = document.getElementById('pageNumbers');
+  pageNumbersElement.innerHTML = '';
+  
+  const maxVisiblePages = 5;
+  let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+  let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+  
+  if (endPage - startPage + 1 < maxVisiblePages) {
+    startPage = Math.max(1, endPage - maxVisiblePages + 1);
+  }
+  
+  for (let i = startPage; i <= endPage; i++) {
+    const pageButton = document.createElement('button');
+    pageButton.className = i === currentPage ? 'btn-primary small' : 'btn-secondary small';
+    pageButton.textContent = i;
+    pageButton.addEventListener('click', () => {
+      currentPage = i;
+      renderList();
+    });
+    pageNumbersElement.appendChild(pageButton);
   }
 }
 
@@ -1806,7 +1862,7 @@ function autoSchedule(nl, numPeriods) {
       ...nl,
       day: slot.day,
       period: slot.period,
-      id: uid()
+      id: generateId()
     };
 
     lessons.push(newLesson);
@@ -1880,7 +1936,7 @@ lessonForm.onsubmit = async e => {
     document.getElementById('submitBtn').classList.add('btn-primary');
   } else {
     const nl = { 
-      id: uid(), 
+      id: generateId(), 
       teacher: teacher.value, 
       subject: subject.value, 
       classLevel: classLevel.value, 
@@ -1915,7 +1971,7 @@ autoBtn.onclick = async () => {
 
   const numPeriods = parseInt(document.getElementById('numPeriods').value) || 1;
   const nl = {
-    id: uid(),
+    id: generateId(),
     teacher: document.getElementById('teacher').value,
     subject: document.getElementById('subject').value,
     classLevel: document.getElementById('classLevel').value,
@@ -2050,31 +2106,37 @@ function updateFilterOptions() {
 function setupFilters() {
   document.getElementById('filterSubject').addEventListener('change', function () {
     currentFilters.subject = this.value;
+    currentPage = 1;
     renderList();
   });
 
   document.getElementById('filterTeacher').addEventListener('change', function () {
     currentFilters.teacher = this.value;
+    currentPage = 1;
     renderList();
   });
 
   document.getElementById('filterClass').addEventListener('change', function () {
     currentFilters.classLevel = this.value;
+    currentPage = 1;
     renderList();
   });
 
   document.getElementById('filterRoom').addEventListener('change', function () {
     currentFilters.room = this.value;
+    currentPage = 1;
     renderList();
   });
 
   document.getElementById('filterDay').addEventListener('change', function () {
     currentFilters.day = this.value;
+    currentPage = 1;
     renderList();
   });
 
   document.getElementById('filterPeriod').addEventListener('change', function () {
     currentFilters.period = this.value;
+    currentPage = 1;
     renderList();
   });
 
@@ -2094,7 +2156,7 @@ function setupFilters() {
     document.getElementById('filterRoom').value = '';
     document.getElementById('filterDay').value = '';
     document.getElementById('filterPeriod').value = '';
-
+    currentPage = 1;
     renderList();
   });
 }
@@ -2476,7 +2538,7 @@ function showStatistics() {
   alert(`📊 สถิติข้อมูลตารางเรียน:\n\n• ครู: ${stats.teachers} ท่าน\n• ชั้นเรียน: ${stats.classes} ห้อง\n• วิชา: ${stats.subjects} รายการ\n• ห้อง: ${stats.rooms} ห้อง\n• ตารางเรียน: ${stats.lessons} คาบ\n• รวมทั้งหมด: ${stats.totalPeriods} คาบสอน`);
 }
 
-// เพิ่มฟังก์ชันแบ่งข้อมูลเป็นชุดเล็กๆ
+// ฟังก์ชันบันทึกข้อมูลแบบแบ่งชุด
 async function saveDataInChunks() {
   if (preventGuestAction("ส่งข้อมูลแบบแบ่งชุด")) return;
   
@@ -2486,101 +2548,83 @@ async function saveDataInChunks() {
     showLoading(true, 'ส่งข้อมูลแบบแบ่งชุด');
     loadingShown = true;
     
-    const CHUNK_SIZE = 50; // ลดขนาดชุดข้อมูลเพื่อป้องกันปัญหา
+    const CHUNK_SIZE = 200; // ลดขนาดชุดข้อมูลเพื่อประสิทธิภาพที่ดีขึ้น
     
     let successCount = 0;
     let errorCount = 0;
+    let totalSaved = 0;
     
-    // บันทึกครูแบบแบ่งชุด
-    if (teachers.length > 0) {
-      for (let i = 0; i < teachers.length; i += CHUNK_SIZE) {
-        const chunk = teachers.slice(i, i + CHUNK_SIZE);
-        try {
-          await callGoogleAppsScript('saveAllData', { teachers: chunk });
-          successCount++;
-          console.log(`✅ บันทึกชุดครู ${i / CHUNK_SIZE + 1} สำเร็จ`);
-        } catch (error) {
-          errorCount++;
-          console.error(`❌ บันทึกชุดครู ${i / CHUNK_SIZE + 1} ล้มเหลว:`, error);
-        }
-      }
+    // สร้างรายงานความคืบหน้า
+    const progressElement = document.createElement('div');
+    progressElement.style.cssText = 'margin: 10px 0; padding: 10px; background: #f0fdf4; border-radius: 6px;';
+    document.getElementById('message').appendChild(progressElement);
+    
+    // บันทึกข้อมูลพื้นฐาน
+    const basicData = {
+      teachers: teachers || [],
+      classes: classes || [],
+      subjects: subjects || [],
+      rooms: rooms || []
+    };
+    
+    try {
+      await callGoogleAppsScript('saveBasicData', basicData);
+      successCount++;
+      totalSaved += basicData.teachers.length + basicData.classes.length + 
+                   basicData.subjects.length + basicData.rooms.length;
+      console.log('✅ บันทึกข้อมูลพื้นฐานสำเร็จ');
+    } catch (error) {
+      errorCount++;
+      console.error('❌ บันทึกข้อมูลพื้นฐานล้มเหลว:', error);
     }
     
-    // บันทึกชั้นเรียนแบบแบ่งชุด
-    if (classes.length > 0) {
-      for (let i = 0; i < classes.length; i += CHUNK_SIZE) {
-        const chunk = classes.slice(i, i + CHUNK_SIZE);
-        try {
-          await callGoogleAppsScript('saveAllData', { classes: chunk });
-          successCount++;
-          console.log(`✅ บันทึกชุดชั้นเรียน ${i / CHUNK_SIZE + 1} สำเร็จ`);
-        } catch (error) {
-          errorCount++;
-          console.error(`❌ บันทึกชุดชั้นเรียน ${i / CHUNK_SIZE + 1} ล้มเหลว:`, error);
-        }
-      }
-    }
-    
-    // บันทึกรายวิชาแบบแบ่งชุด
-    if (subjects.length > 0) {
-      for (let i = 0; i < subjects.length; i += CHUNK_SIZE) {
-        const chunk = subjects.slice(i, i + CHUNK_SIZE);
-        try {
-          await callGoogleAppsScript('saveAllData', { subjects: chunk });
-          successCount++;
-          console.log(`✅ บันทึกชุดรายวิชา ${i / CHUNK_SIZE + 1} สำเร็จ`);
-        } catch (error) {
-          errorCount++;
-          console.error(`❌ บันทึกชุดรายวิชา ${i / CHUNK_SIZE + 1} ล้มเหลว:`, error);
-        }
-      }
-    }
-    
-    // บันทึกห้องแบบแบ่งชุด
-    if (rooms.length > 0) {
-      for (let i = 0; i < rooms.length; i += CHUNK_SIZE) {
-        const chunk = rooms.slice(i, i + CHUNK_SIZE);
-        try {
-          await callGoogleAppsScript('saveAllData', { rooms: chunk });
-          successCount++;
-          console.log(`✅ บันทึกชุดห้อง ${i / CHUNK_SIZE + 1} สำเร็จ`);
-        } catch (error) {
-          errorCount++;
-          console.error(`❌ บันทึกชุดห้อง ${i / CHUNK_SIZE + 1} ล้มเหลว:`, error);
-        }
-      }
-    }
-    
-    // บันทึกตารางเรียนแบบแบ่งชุด
+    // บันทึก lessons แบบแบ่งชุด
     if (lessons.length > 0) {
       for (let i = 0; i < lessons.length; i += CHUNK_SIZE) {
         const chunk = lessons.slice(i, i + CHUNK_SIZE);
+        
+        progressElement.innerHTML = 
+          `🔄 กำลังบันทึกชุดข้อมูล ${Math.floor(i/CHUNK_SIZE) + 1}/${Math.ceil(lessons.length/CHUNK_SIZE)}...`;
+        
         try {
-          await callGoogleAppsScript('saveAllData', { lessons: chunk });
+          await callGoogleAppsScript('saveLessonsChunk', { 
+            lessons: chunk,
+            chunkIndex: Math.floor(i/CHUNK_SIZE),
+            totalChunks: Math.ceil(lessons.length/CHUNK_SIZE)
+          });
           successCount++;
-          console.log(`✅ บันทึกชุดตารางเรียน ${i / CHUNK_SIZE + 1} สำเร็จ`);
+          totalSaved += chunk.length;
+          console.log(`✅ บันทึกชุด lessons ${Math.floor(i/CHUNK_SIZE) + 1} สำเร็จ`);
         } catch (error) {
           errorCount++;
-          console.error(`❌ บันทึกชุดตารางเรียน ${i / CHUNK_SIZE + 1} ล้มเหลว:`, error);
+          console.error(`❌ บันทึกชุด lessons ${Math.floor(i/CHUNK_SIZE) + 1} ล้มเหลว:`, error);
+        }
+        
+        // พักระหว่างชุดเพื่อป้องกัน timeout
+        if (i > 0 && i % (CHUNK_SIZE * 5) === 0) {
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
     }
+    
+    // ลบรายงานความคืบหน้า
+    progressElement.remove();
     
     if (errorCount === 0) {
       document.getElementById('message').innerHTML = 
         `<div style="color:green;">
           ✅ บันทึกข้อมูลทั้งหมดลง Google Sheets สำเร็จ!<br>
-          <small>ส่งข้อมูลทั้งหมด ${successCount} ชุด</small>
+          <small>บันทึกข้อมูลทั้งหมด ${totalSaved} รายการใน ${successCount} ชุด</small>
         </div>`;
     } else {
       document.getElementById('message').innerHTML = 
         `<div style="color:orange;">
           ⚠️ บันทึกข้อมูลบางส่วนลง Google Sheets<br>
-          <small>สำเร็จ: ${successCount} ชุด | ล้มเหลว: ${errorCount} ชุด</small>
+          <small>สำเร็จ: ${successCount} ชุด | ล้มเหลว: ${errorCount} ชุด | รวมบันทึก: ${totalSaved} รายการ</small>
           <br><br>
           <strong>คำแนะนำ:</strong><br>
           • ข้อมูลบางส่วนอาจถูกบันทึกแล้ว<br>
-          • ลองส่งข้อมูลอีกครั้งหรือแบ่งข้อมูลเป็นชุดเล็กลง
+          • ลองบันทึกอีกครั้งหรือแบ่งข้อมูลเป็นชุดเล็กลง
         </div>`;
     }
     
@@ -2588,7 +2632,7 @@ async function saveDataInChunks() {
     console.error('❌ ข้อผิดพลาดใน saveDataInChunks:', error);
     document.getElementById('message').innerHTML = 
       `<div style="color:red;">
-        ❌ เกิดข้อผิดพลาดในการส่งข้อมูลแบบแบ่งชุด<br>
+        ❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลแบบแบ่งชุด<br>
         <small>${error.message}</small>
       </div>`;
   } finally {
@@ -2597,6 +2641,10 @@ async function saveDataInChunks() {
     }
   }
 }
+
+// =============================================
+// การเริ่มต้นระบบ
+// =============================================
 
 // Event Listeners สำหรับปุ่ม JSON และ Google Sheets
 document.getElementById('downloadJsonBtn').onclick = downloadJSON;
@@ -2641,6 +2689,7 @@ window.addEventListener('DOMContentLoaded', function () {
 
   setupFilters();
   setupSummaryTabs();
+  setupPagination();
 
   // ตรวจสอบสถานะการโหลดทุก 30 วินาที
   setInterval(checkLoadingStatus, 30000);
