@@ -289,6 +289,29 @@
               </div>
             </div>
             
+            <!-- เพิ่มระบบแบ่งหน้า -->
+            <div class="pagination-controls" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <div>
+                <span id="paginationInfo" style="font-size: 14px; color: #666;"></span>
+              </div>
+              <div style="display: flex; gap: 5px;">
+                <button id="firstPageBtn" class="btn-secondary small">หน้าแรก</button>
+                <button id="prevPageBtn" class="btn-secondary small">ก่อนหน้า</button>
+                <span id="pageNumbers" style="display: flex; gap: 5px;"></span>
+                <button id="nextPageBtn" class="btn-secondary small">ถัดไป</button>
+                <button id="lastPageBtn" class="btn-secondary small">หน้าสุดท้าย</button>
+              </div>
+              <div>
+                <label>แสดง:</label>
+                <select id="pageSizeSelect" style="padding: 4px; border-radius: 4px; border: 1px solid #ccc;">
+                  <option value="50">50 รายการ</option>
+                  <option value="100" selected>100 รายการ</option>
+                  <option value="200">200 รายการ</option>
+                  <option value="500">500 รายการ</option>
+                </select>
+              </div>
+            </div>
+            
             <table id="lessonTable">
               <thead>
                 <tr><th>วิชา</th><th>ครู</th><th>ชั้น</th><th>ห้อง</th><th>วัน</th><th>คาบ</th><th>จัดการ</th></tr>
