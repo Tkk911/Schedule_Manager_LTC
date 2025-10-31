@@ -1,577 +1,757 @@
-:root{
-  --green-main:#10b981;
-  --green-light:#a7f3d0;
-  --green-dark:#065f46;
-  --muted:#4b5563;
-}
-body{font-family:"Noto Sans Thai","Segoe UI",Arial,sans-serif;margin:18px;background:#ecfdf5;color:#064e3b;overflow-x:hidden}
-.container{max-width:1200px;margin:0 auto}
-header{text-align:center;margin-bottom:16px}
-header img{width:90px}
-header h1{font-size:22px;margin:6px 0;color:var(--green-dark)}
-header .sub{font-size:15px;font-weight:600;color:#1e3a8a}
-header .term{margin-top:6px}
-header input{border:1px solid #d1fae5;border-radius:6px;padding:4px 6px;font-size:14px;text-align:center;background:#f0fdf4}
-.card{background:white;border-radius:12px;padding:14px;box-shadow:0 3px 10px rgba(0,0,0,0.08);margin-bottom:14px;border-top:4px solid var(--green-main)}
-form .row{display:flex;gap:10px;margin-bottom:10px}
-label{font-size:13px;color:var(--muted);display:block}
-input[type=text], input[type=number], select{width:100%;padding:8px;border:1px solid #d1fae5;border-radius:6px;font-size:14px;background:#f0fdf4}
-button{padding:8px 12px;border-radius:8px;border:0;cursor:pointer;font-size:13px;font-weight:600}
-.btn-primary{background:var(--green-main);color:white}
-.btn-primary:hover{background:var(--green-dark)}
-.btn-danger{background:#ef4444;color:white}
-.btn-secondary{background:#d1fae5;color:var(--green-dark)}
-.btn-warning{background:#f59e0b;color:white}
-.btn-info{background:#3b82f6;color:white}
-table{width:100%;border-collapse:collapse}
-th,td{border:1px solid #d1fae5;padding:8px;font-size:13px;vertical-align:middle}
-th{background:#d1fae5}
-.small{font-size:12px;color:#374151}
-.tag{display:block;padding:6px;border-radius:6px;margin:3px 0;background:var(--green-light);font-size:12px}
-.grid-wrap{overflow:auto;-webkit-overflow-scrolling:touch}
-.summary{display:flex;gap:12px;flex-wrap:wrap}
-.summary .box{background:var(--green-light);padding:10px;border-radius:8px;min-width:160px}
-.tabs{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
-.tab{padding:6px 12px;border-radius:6px;background:#d1fae5;color:#064e3b;cursor:pointer;font-size:13px;font-weight:600}
-.tab.active{background:var(--green-main);color:white}
-.layout{display:flex;flex-direction:column;gap:14px}
+/* ระบบจัดการตารางเรียนและตารางสอน - Styles */
+/* Version: 3.3.0 - Fixed "Failed to fetch" error and improved error handling */
 
-/* การจัดกึ่งกลางสำหรับตารางหลัก */
-#mainGrid th, #mainGrid td {
-  text-align: center;
-  vertical-align: middle;
-}
-#mainGrid th div {
-  font-size: 0.9em;
-}
-#mainGrid .tag {
-  text-align: center;
+:root {
+    --primary-color: #2c3e50;
+    --secondary-color: #3498db;
+    --accent-color: #e74c3c;
+    --light-color: #ecf0f1;
+    --dark-color: #2c3e50;
+    --success-color: #27ae60;
+    --warning-color: #f39c12;
+    --danger-color: #e74c3c;
+    --info-color: #17a2b8;
 }
 
-/* สไตล์สำหรับฟอร์มจัดการข้อมูล */
-.data-management {
-  margin-top: 10px;
-  padding: 10px;
-  border: 1px solid #d1fae5;
-  border-radius: 8px;
-  background: #f0fdf4;
-}
-.data-management h4 {
-  margin: 0 0 8px 0;
-  font-size: 14px;
-  color: var(--green-dark);
-}
-.data-management .input-group {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.data-management input {
-  flex: 1;
-  padding: 6px;
-  border: 1px solid #a7f3d0;
-  border-radius: 4px;
-  font-size: 12px;
-}
-.data-management button {
-  padding: 6px 10px;
-  font-size: 12px;
+* {
+    font-family: 'Sarabun', sans-serif;
 }
 
-/* เพิ่มสไตล์สำหรับข้อมูลจำนวนมาก */
-.data-list {
-  max-height: 200px; /* เพิ่มความสูงสำหรับข้อมูลจำนวนมาก */
-  overflow-y: auto;
-  border: 1px solid #d1fae5;
-  border-radius: 4px;
-  padding: 6px;
-  background: white;
-  font-size: 12px;
+body {
+    background-color: #f8f9fa;
+    color: #333;
+    line-height: 1.6;
 }
 
-/* สไตล์สำหรับ scrollbar ใน data-list */
-.data-list::-webkit-scrollbar {
-  width: 6px;
+/* Navigation Bar */
+.navbar {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #34495e 100%);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    padding: 0.8rem 0;
 }
 
-.data-list::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 3px;
+.navbar-brand {
+    font-weight: 600;
+    font-size: 1.3rem;
+    display: flex;
+    align-items: center;
 }
 
-.data-list::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 3px;
+/* Logo Styles */
+.navbar-brand img {
+    border-radius: 4px;
+    transition: transform 0.3s ease;
+    margin-right: 10px;
 }
 
-.data-list::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+.navbar-brand:hover img {
+    transform: scale(1.05);
 }
 
-.data-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 4px 0;
-  border-bottom: 1px solid #f0fdf4;
-}
-.data-item:last-child {
-  border-bottom: none;
-}
-.data-item button {
-  padding: 2px 6px;
-  font-size: 10px;
-  margin-left: 4px;
+.navbar-nav .nav-link {
+    padding: 0.5rem 1rem;
+    transition: all 0.3s ease;
 }
 
-/* สไตล์สำหรับตารางที่มีข้อมูลจำนวนมาก */
-#lessonTable {
-  position: relative;
+.navbar-nav .nav-link:hover {
+    background-color: rgba(255,255,255,0.1);
+    border-radius: 5px;
 }
 
-#lessonTable tbody {
-  max-height: 500px;
-  overflow-y: auto;
-  display: block;
+/* Sidebar */
+.sidebar {
+    background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    min-height: calc(100vh - 76px);
+    border-right: 1px solid #dee2e6;
 }
 
-#lessonTable thead,
-#lessonTable tbody tr {
-  display: table;
-  width: 100%;
-  table-layout: fixed;
+.sidebar .nav-link {
+    padding: 12px 20px;
+    color: #555;
+    border-left: 4px solid transparent;
+    transition: all 0.3s;
+    font-weight: 500;
+}
+
+.sidebar .nav-link:hover {
+    background-color: #e9ecef;
+    color: var(--primary-color);
+    border-left-color: var(--secondary-color);
+}
+
+.sidebar .nav-link.active {
+    background-color: var(--secondary-color);
+    color: white;
+    border-left-color: var(--primary-color);
+}
+
+.sidebar .nav-link i {
+    width: 20px;
+    text-align: center;
+}
+
+/* Schedule Table */
+.schedule-table {
+    background-color: white;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 0;
+}
+
+.schedule-table th {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #34495e 100%);
+    color: white;
+    text-align: center;
+    vertical-align: middle;
+    font-weight: 600;
+    padding: 12px 8px;
+    border: none;
+}
+
+.schedule-table .time-header {
+    background: linear-gradient(135deg, var(--dark-color) 0%, #2c3e50 100%);
+    width: 120px;
+    font-weight: 700;
+}
+
+.schedule-table .break-cell {
+    background: linear-gradient(135deg, var(--warning-color) 0%, #e67e22 100%);
+    color: white;
+    font-weight: 600;
+}
+
+/* จัดข้อความในตารางให้อยู่ตรงกลาง */
+.schedule-table td {
+    vertical-align: middle;
+    height: 85px;
+    padding: 8px;
+    border: 1px solid #dee2e6;
+    transition: all 0.3s ease;
+    position: relative;
+    text-align: center;
+}
+
+.schedule-table td div {
+    text-align: center;
+}
+
+/* จัดการกับข้อความหลายบรรทัด */
+.subject-cell div {
+    line-height: 1.3;
+    margin-bottom: 2px;
+    text-align: center;
+}
+
+/* สำหรับข้อความในเซลล์ที่ว่าง */
+.empty-cell div {
+    text-align: center;
+}
+
+/* สำหรับกิจกรรม */
+.activity {
+    text-align: center;
+    vertical-align: middle;
+}
+
+.schedule-table td:hover {
+    background-color: #f8f9fa;
+}
+
+/* Subject Cards in Table */
+.subject-cell {
+    background: linear-gradient(135deg, #e8f4fc 0%, #ffffff 100%);
+    border-left: 4px solid var(--secondary-color);
+    border-radius: 5px;
+}
+
+.subject-cell:hover {
+    background: linear-gradient(135deg, #d1ecf1 0%, #e8f4fc 100%);
+}
+
+/* Edit Mode Styles */
+.edit-mode .subject-cell {
+    cursor: pointer !important;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.edit-mode .subject-cell:hover {
+    background: linear-gradient(135deg, #d1ecf1 0%, #b6e0f1 100%);
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 10;
+}
+
+.edit-mode .subject-cell:hover::after {
+    content: "✏️ คลิกเพื่อแก้ไข";
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    background: rgba(0,0,0,0.8);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: normal;
+}
+
+.edit-mode .empty-cell {
+    cursor: pointer !important;
+    transition: all 0.3s ease;
+    background: #f8f9fa;
+}
+
+.edit-mode .empty-cell:hover {
+    background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+    transform: scale(1.02);
+}
+
+.edit-mode .empty-cell:hover::after {
+    content: "➕ คลิกเพื่อเพิ่ม";
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    background: rgba(0,0,0,0.8);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: normal;
+}
+
+/* Room Display Styles */
+.lab-room {
+    background-color: #e8f5e8;
+    border-left: 4px solid #28a745;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-align: center;
+}
+
+.class-room {
+    background-color: #e8f4fc;
+    border-left: 4px solid #007bff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-align: center;
+}
+
+.multiple-rooms {
+    background-color: #fff3cd;
+    border-left: 4px solid #ffc107;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-align: center;
+}
+
+.workshop-room {
+    background-color: #f8d7da;
+    border-left: 4px solid #dc3545;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-align: center;
+}
+
+/* Summary Cards */
+.summary-card {
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+    border: none;
+    overflow: hidden;
+}
+
+.summary-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+.teacher-card {
+    border-left: 5px solid var(--success-color);
+}
+
+.subject-card {
+    border-left: 5px solid var(--secondary-color);
+}
+
+.room-card {
+    border-left: 5px solid var(--warning-color);
+}
+
+.summary-card .card-header {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-bottom: 1px solid #dee2e6;
+    padding: 1rem 1.25rem;
+}
+
+.summary-card .card-title {
+    color: var(--dark-color);
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+/* Stat Cards */
+.stat-card {
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+    border: none;
+}
+
+.stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+}
+
+.stat-card h4 {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+}
+
+.stat-card p {
+    margin-bottom: 0;
+    font-size: 0.9rem;
+    opacity: 0.9;
+    font-weight: 500;
 }
 
 /* Modal Styles */
-.modal {
-  display: none;
-  position: fixed;
-  z-index: 1000;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0,0,0,0.4);
+.modal-header {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #34495e 100%);
+    color: white;
+    border-bottom: none;
+    padding: 1.25rem;
 }
 
-.modal-content {
-  background-color: white;
-  margin: 15% auto;
-  padding: 20px;
-  border-radius: 12px;
-  width: 400px;
-  max-width: 90%;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-  border-top: 4px solid var(--green-main);
+.schedule-form-modal .modal-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
-.close {
-  color: #aaa;
-  float: right;
-  font-size: 28px;
-  font-weight: bold;
-  cursor: pointer;
-  line-height: 1;
+.modal-title {
+    font-weight: 600;
 }
 
-.close:hover,
-.close:focus {
-  color: var(--green-dark);
+.btn-close-white {
+    filter: invert(1);
 }
 
-#editInput {
-  width: 100%;
-  padding: 10px;
-  margin-top: 10px;
-  border: 1px solid #d1fae5;
-  border-radius: 6px;
-  font-size: 14px;
+/* Form Styles */
+.form-control:focus, .form-select:focus {
+    border-color: var(--secondary-color);
+    box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
 }
 
-/* สไตล์สำหรับสรุปคาบสอนแบบละเอียด */
-.teacher-summary-detail {
-  width: 100%;
-  max-height: 400px;
-  overflow-y: auto;
+.form-label {
+    font-weight: 500;
+    color: #495057;
+    margin-bottom: 0.5rem;
 }
 
-.teacher-summary-item {
-  background: var(--green-light);
-  padding: 12px;
-  border-radius: 8px;
-  margin-bottom: 10px;
-  border-left: 4px solid var(--green-main);
+/* Button Styles */
+.btn {
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    padding: 0.5rem 1rem;
 }
 
-.teacher-summary-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid rgba(16, 185, 129, 0.3);
+.btn-primary {
+    background: linear-gradient(135deg, var(--secondary-color) 0%, #2980b9 100%);
+    border: none;
 }
 
-.teacher-summary-name {
-  font-weight: bold;
-  color: var(--green-dark);
-  font-size: 14px;
+.btn-primary:hover {
+    background: linear-gradient(135deg, #2980b9 0%, #21618c 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
 }
 
-.teacher-summary-total {
-  background: var(--green-main);
-  color: white;
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: bold;
+.btn-success {
+    background: linear-gradient(135deg, var(--success-color) 0%, #219653 100%);
+    border: none;
 }
 
-.subject-list {
-  margin-top: 6px;
+.btn-warning {
+    background: linear-gradient(135deg, var(--warning-color) 0%, #e67e22 100%);
+    border: none;
 }
 
-.subject-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 4px 0;
-  font-size: 12px;
+.btn-danger {
+    background: linear-gradient(135deg, var(--danger-color) 0%, #c0392b 100%);
+    border: none;
 }
 
-.subject-name {
-  flex: 1;
+.btn-info {
+    background: linear-gradient(135deg, var(--info-color) 0%, #138496 100%);
+    border: none;
 }
 
-.subject-periods {
-  background: white;
-  padding: 2px 6px;
-  border-radius: 8px;
-  font-weight: bold;
-  color: var(--green-dark);
-  min-width: 30px;
-  text-align: center;
+/* Badge Styles */
+.badge {
+    font-weight: 500;
+    padding: 0.4em 0.7em;
 }
 
-.no-data {
-  text-align: center;
-  color: var(--muted);
-  padding: 20px;
-  font-style: italic;
+.badge.bg-primary {
+    background: linear-gradient(135deg, var(--secondary-color) 0%, #2980b9 100%) !important;
 }
 
-.summary-controls {
-  margin-bottom: 10px;
+/* Alert Styles */
+.alert {
+    border: none;
+    border-radius: 8px;
+    border-left: 4px solid;
 }
 
-/* สไตล์สำหรับส่วนกรองข้อมูล */
-.filter-controls {
-  background: #f0fdf4;
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid #d1fae5;
+.alert-info {
+    border-left-color: var(--info-color);
+    background: linear-gradient(135deg, #d1ecf1 0%, #e8f4fc 100%);
 }
 
-.filter-controls label {
-  font-size: 12px;
-  font-weight: bold;
-  margin-bottom: 4px;
-  display: block;
+.alert-success {
+    border-left-color: var(--success-color);
+    background: linear-gradient(135deg, #d4edda 0%, #e8f5e8 100%);
 }
 
-/* สไตล์สำหรับแท็บสรุป */
-.summary-tabs {
-  display: flex;
-  margin-bottom: 10px;
-  border-bottom: 1px solid #d1fae5;
+.alert-warning {
+    border-left-color: var(--warning-color);
+    background: linear-gradient(135deg, #fff3cd 0%, #fff9e6 100%);
 }
 
-.summary-tab {
-  padding: 8px 16px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--muted);
-  border-bottom: 2px solid transparent;
+.alert-danger {
+    border-left-color: var(--danger-color);
+    background: linear-gradient(135deg, #f8d7da 0%, #ffe6e6 100%);
 }
 
-.summary-tab.active {
-  color: var(--green-main);
-  border-bottom: 2px solid var(--green-main);
+/* Notification Styles */
+.notification {
+    position: fixed;
+    top: 90px;
+    right: 20px;
+    z-index: 9999;
+    min-width: 350px;
+    animation: slideInRight 0.3s ease;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
 }
 
-.summary-tab:hover {
-  color: var(--green-dark);
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
 }
 
-/* สไตล์สำหรับสรุปชั้นปี */
-.class-summary-detail {
-  width: 100%;
-  max-height: 400px;
-  overflow-y: auto;
+/* Progress Bar Styles */
+.progress {
+    height: 8px;
 }
 
-.class-summary-item {
-  background: var(--green-light);
-  padding: 12px;
-  border-radius: 8px;
-  margin-bottom: 10px;
-  border-left: 4px solid var(--green-main);
+.progress-bar-striped {
+    background-image: linear-gradient(45deg, rgba(255, 255, 255, 0.15) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.15) 50%, rgba(255, 255, 255, 0.15) 75%, transparent 75%, transparent);
+    background-size: 1rem 1rem;
 }
 
-.class-summary-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid rgba(16, 185, 129, 0.3);
+.progress-bar-animated {
+    animation: progress-bar-stripes 1s linear infinite;
 }
 
-.class-summary-name {
-  font-weight: bold;
-  color: var(--green-dark);
-  font-size: 14px;
+@keyframes progress-bar-stripes {
+    0% {
+        background-position: 1rem 0;
+    }
+    100% {
+        background-position: 0 0;
+    }
 }
 
-.class-summary-total {
-  background: var(--green-main);
-  color: white;
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: bold;
+/* Table Styles */
+.table-striped tbody tr:nth-of-type(odd) {
+    background-color: rgba(0, 0, 0, 0.02);
 }
 
-/* สไตล์สำหรับระบบล็อกอิน */
-#loginModal .modal-content {
-  background: white;
-  margin: 15% auto;
-  padding: 30px;
-  border-radius: 12px;
-  width: 400px;
-  max-width: 90%;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-  border-top: 4px solid var(--green-main);
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 0, 0, 0.04);
 }
 
-#userInfo {
-  margin-top: 10px;
-  font-size: 14px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 10px;
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .sidebar {
+        min-height: auto;
+        margin-bottom: 1rem;
+    }
+    
+    .schedule-table {
+        font-size: 0.8rem;
+    }
+    
+    .schedule-table th, 
+    .schedule-table td {
+        padding: 0.4rem;
+    }
+    
+    .schedule-table .time-header {
+        width: 80px;
+        font-size: 0.75rem;
+    }
+    
+    .subject-cell div {
+        font-size: 0.75rem;
+    }
+    
+    .stat-card h4 {
+        font-size: 2rem;
+    }
+    
+    .notification {
+        min-width: 300px;
+        right: 10px;
+        left: 10px;
+    }
+    
+    .navbar-brand {
+        font-size: 1.1rem;
+    }
+    
+    .navbar-brand img {
+        height: 35px;
+    }
 }
 
-#userStatus {
-  font-weight: bold;
+@media (max-width: 576px) {
+    .navbar-brand {
+        font-size: 1rem;
+    }
+    
+    .navbar-brand img {
+        height: 30px;
+    }
+    
+    .schedule-table {
+        font-size: 0.7rem;
+    }
+    
+    .schedule-table th, 
+    .schedule-table td {
+        padding: 0.3rem;
+    }
+    
+    .summary-card .card-body {
+        padding: 1rem;
+    }
 }
 
-/* ปรับปรุงการแสดงผลสำหรับโหมด Guest */
-.data-management[style*="display: none"] {
-  display: none !important;
+/* Print styles */
+@media print {
+    .navbar, .sidebar, .btn, .modal, .alert, .no-print {
+        display: none !important;
+    }
+    
+    .container-fluid {
+        padding: 0 !important;
+    }
+    
+    .col-md-10 {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+    
+    .schedule-table {
+        box-shadow: none;
+        border: 1px solid #000;
+    }
+    
+    .schedule-table th {
+        background: #f0f0f0 !important;
+        color: #000 !important;
+        -webkit-print-color-adjust: exact;
+    }
+    
+    body {
+        margin: 0;
+        color: #000;
+    }
+    
+    .navbar-brand img {
+        filter: grayscale(100%) brightness(0%);
+    }
 }
 
-/* Loading spinner */
-#loading {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0,0,0,0.5);
-  display: none;
-  justify-content: center;
-  align-items: center;
-  z-index: 9999;
-  color: white;
-  font-size: 18px;
+/* Custom Scrollbar */
+.table-responsive::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
 }
 
-.loading-spinner {
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid var(--green-main);
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  animation: spin 2s linear infinite;
+.table-responsive::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+    background: var(--secondary-color);
+    border-radius: 4px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb:hover {
+    background: #2980b9;
+}
+
+/* Loading Animation */
+.loading {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255,255,255,.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+    to { transform: rotate(360deg); }
 }
 
-/* สไตล์สำหรับการแสดงผลความคืบหน้า */
-.loading-progress {
-  margin-top: 10px;
-  text-align: center;
-  font-size: 14px;
-  color: #666;
+/* Connection Status */
+#connectionStatus {
+    font-size: 0.85rem;
 }
 
-/* สไตล์สำหรับข้อความเตือนข้อมูลจำนวนมาก */
-.large-data-warning {
-  background: #fff3cd;
-  border: 1px solid #ffeaa7;
-  border-radius: 6px;
-  padding: 10px;
-  margin: 10px 0;
-  color: #856404;
-  font-size: 14px;
+/* Edit Mode Alert */
+#editModeAlert {
+    margin-bottom: 1rem;
 }
 
-/* สไตล์สำหรับ dropdown ที่มีข้อมูลจำนวนมาก */
-select {
-  max-height: 200px;
+/* Icon Styles */
+.icon-lg {
+    font-size: 1.5rem;
 }
 
-/* สไตล์สำหรับการแสดงสถิติ */
-.data-statistics {
-  background: #f8f9fa;
-  border-radius: 8px;
-  padding: 15px;
-  margin: 15px 0;
-  border: 1px solid #e9ecef;
+/* Text Utilities */
+.text-small {
+    font-size: 0.85rem;
 }
 
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 10px;
-  margin-top: 10px;
+.text-xs {
+    font-size: 0.75rem;
 }
 
-.stat-item {
-  background: white;
-  padding: 10px;
-  border-radius: 6px;
-  text-align: center;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+/* Background Utilities */
+.bg-gradient-primary {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #34495e 100%);
 }
 
-.stat-number {
-  font-size: 24px;
-  font-weight: bold;
-  color: #10b981;
-  margin-bottom: 5px;
+.bg-gradient-secondary {
+    background: linear-gradient(135deg, var(--secondary-color) 0%, #2980b9 100%);
 }
 
-.stat-label {
-  font-size: 12px;
-  color: #6c757d;
+/* Shadow Utilities */
+.shadow-sm {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075) !important;
 }
 
-/* ปรับปรุงการแสดงผลสำหรับมือถือ */
-@media (max-width: 768px) {
-  .data-list {
-    max-height: 150px;
-  }
-  
-  .stat-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  #lessonTable {
-    font-size: 12px;
-  }
-  
-  .container {
-    margin: 10px;
-  }
-  
-  .card {
-    padding: 10px;
-  }
-  
-  .summary .box {
-    min-width: 100%;
-  }
-  
-  form .row {
-    flex-direction: column;
-  }
+.shadow {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
 }
 
-/* การแสดงผลบนมือถือขนาดเล็กมาก */
-@media (max-width: 480px) {
-  body {
-    margin: 10px;
-  }
-  
-  header h1 {
-    font-size: 18px;
-  }
-  
-  header .sub {
-    font-size: 13px;
-  }
-  
-  .tabs {
-    gap: 4px;
-  }
-  
-  .tab {
-    padding: 4px 8px;
-    font-size: 12px;
-  }
-  
-  .teacher-summary-item,
-  .class-summary-item {
-    padding: 8px;
-  }
+.shadow-lg {
+    box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.175) !important;
 }
 
-/* ปรับปรุง accessibility */
-button:focus, 
-input:focus, 
-select:focus {
-  outline: 2px solid var(--green-main);
-  outline-offset: 2px;
+/* Troubleshooting Styles */
+.troubleshooting-tips {
+    margin-top: 1rem;
 }
 
-/* ปรับปรุงการพิมพ์ */
-@media print {
-  #controls, #message, #tabArea, #filterBox {display:none}
-  body{background:white;color:black}
-  .card{box-shadow:none;border:1px solid #ccc}
-  button{display:none}
-  header input{border:0;background:none}
-  .modal {display:none !important;}
-  .summary-controls {display:none !important;}
-  .filter-controls {display:none !important;}
-  .summary-tabs {display:none !important;}
-  #loginModal {display:none !important;}
-  #userInfo {display:none !important;}
-  #loading {display:none !important;}
-  
-  /* เพิ่มการซ่อนองค์ประกอบที่ไม่จำเป็น */
-  .tabs, .summary-controls, .filter-controls {
-    display: none !important;
-  }
-  
-  /* ปรับปรุงสีสำหรับการพิมพ์ */
-  .card {
-    background: white !important;
-    color: black !important;
-  }
-  
-  .tag {
-    background: #f5f5f5 !important;
-    color: black !important;
-    border: 1px solid #ddd !important;
-  }
-  
-  .teacher-summary-item,
-  .class-summary-item {
-    background: #f9f9f9 !important;
-    border-left: 4px solid #ccc !important;
-  }
-  
-  .teacher-summary-total,
-  .class-summary-total {
-    background: #666 !important;
-    color: white !important;
-  }
+.troubleshooting-tips ol {
+    margin-bottom: 0.5rem;
+}
+
+/* Connection Status Styles */
+#connectionDetails p {
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+#urlStatus {
+    font-family: monospace;
+    background: #f8f9fa;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid #dee2e6;
+}
+
+/* Button Group Styles */
+.btn-group-vertical .btn {
+    margin-bottom: 0.5rem;
+}
+
+/* Card Improvements */
+.card {
+    border: none;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.card-header {
+    font-weight: 600;
+}
+
+/* Form Improvements */
+.form-text {
+    font-size: 0.8rem;
+}
+
+/* Badge Improvements */
+.badge {
+    font-size: 0.75em;
+}
+
+/* Animation for connection status */
+.connection-pulse {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+/* Status colors for connection */
+.status-online {
+    color: var(--success-color);
+}
+
+.status-offline {
+    color: var(--danger-color);
+}
+
+.status-warning {
+    color: var(--warning-color);
+}
+
+/* Tool improvements */
+.tool-card {
+    transition: all 0.3s ease;
+}
+
+.tool-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
 }
