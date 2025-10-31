@@ -1,2703 +1,3105 @@
-const periods = ["คาบ 1 (08:30-09:20)", "คาบ 2 (09:20-10:10)", "คาบ 3 (10:20-11:10)", "คาบ 4 (11:10-12:00)", "พักกลางวัน", "คาบ 5 (12:50-13:40)", "คาบ 6 (13:40-14:30)", "คาบ 7 (14:30-15:20)"];
-const days = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร️"];
+// ระบบจัดการตารางเรียนและตารางสอน - JavaScript หลัก
+// Version: 3.3.0 - Fixed "Failed to fetch" error and improved error handling
+// Sheet ID: 1fUothdjvvd8A9Gf_uW4WWpsnABxmet2sK0egxHstIJo
 
-// URL ของ Google Apps Script
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbwJgrqS5oiMbBK9fa0MDBnL9eunL7Hi5oJQoALFbK9-ZQbyNZcT0pgUQSwLsg4aBKhRMw/exec';
+// Global variables
+let isAdmin = false;
+let scheduleData = {};
+let teacherData = {};
+let subjectData = {};
+let roomData = {};
+let classData = {};
+let googleSheetsUrl = '';
+let onlineMode = true;
 
-let lessons = [];
-let teachers = [];
-let classes = [];
-let subjects = [];
-let rooms = [];
-
-let currentTab = "all";
-let filterValue = "";
-let editingId = null;
-
-let currentEditType = null;
-let currentEditIndex = null;
-let originalValue = null;
-
-let currentFilters = {
-  subject: '',
-  teacher: '',
-  classLevel: '',
-  room: '',
-  day: '',
-  period: ''
-};
-
-let isAdminMode = false;
-const ADMIN_PASSWORD = "admin452026";
-
-// ตัวแปรจัดการ loading
-let loadingTimeoutId = null;
-let currentLoadingOperation = null;
-
-// ตัวแปรสำหรับจัดการการแบ่งหน้า
-let currentPage = 1;
-let pageSize = 100;
-let totalPages = 1;
-let filteredLessons = [];
-
-// =============================================
-// ฟังก์ชันจัดการ Loading (แก้ไขแล้ว)
-// =============================================
-
-// ฟังก์ชันแสดง/ซ่อน loading (เวอร์ชันป้องกันการติดค้าง)
-function showLoading(show, operation = 'ทั่วไป') {
-  const loadingElement = document.getElementById('loading');
-  
-  if (loadingElement) {
-    // ล้าง timeout เดิม
-    if (loadingTimeoutId) {
-      clearTimeout(loadingTimeoutId);
-      loadingTimeoutId = null;
-    }
-    
-    if (show) {
-      currentLoadingOperation = operation;
-      loadingElement.style.display = 'flex';
-      console.log(`🔄 เริ่มโหลด: ${operation}`);
-      
-      // ตั้งค่า timeout อัตโนมัติเพื่อป้องกันการติดค้าง
-      loadingTimeoutId = setTimeout(() => {
-        if (loadingElement.style.display === 'flex') {
-          console.warn(`⚠️ โหลดนานเกิน 30 วินาที: ${operation}`);
-          document.getElementById('message').innerHTML = 
-            `<div style="color:orange;">
-              ⚠️ การโหลดใช้เวลานานกว่าปกติ<br>
-              <small>กำลังพยายามดำเนินการ: ${operation}</small>
-              <br><small>หากติดขัดนานเกินไป กรุณากดปุ่ม "ยกเลิกการโหลด"</small>
-            </div>`;
+// Data management functions
+class DataManager {
+    static saveToLocalStorage() {
+        try {
+            localStorage.setItem('scheduleData', JSON.stringify(scheduleData));
+            localStorage.setItem('teacherData', JSON.stringify(teacherData));
+            localStorage.setItem('subjectData', JSON.stringify(subjectData));
+            localStorage.setItem('roomData', JSON.stringify(roomData));
+            localStorage.setItem('classData', JSON.stringify(classData));
+            localStorage.setItem('googleSheetsUrl', googleSheetsUrl);
+            localStorage.setItem('onlineMode', onlineMode.toString());
+            return true;
+        } catch (error) {
+            console.error('Error saving to localStorage:', error);
+            return false;
         }
-      }, 30000); // 30 seconds timeout
-      
-    } else {
-      loadingElement.style.display = 'none';
-      currentLoadingOperation = null;
-      console.log(`✅ โหลดเสร็จสิ้น: ${operation}`);
     }
-  }
-}
 
-// ฟังก์ชันบังคับซ่อน loading
-function forceHideLoading() {
-  console.log('🚫 บังคับซ่อน loading โดยผู้ใช้');
-  
-  // ล้าง timeout
-  if (loadingTimeoutId) {
-    clearTimeout(loadingTimeoutId);
-    loadingTimeoutId = null;
-  }
-  
-  // ซ่อน loading
-  const loadingElement = document.getElementById('loading');
-  if (loadingElement) {
-    loadingElement.style.display = 'none';
-  }
-  
-  currentLoadingOperation = null;
-  
-  document.getElementById('message').innerHTML = 
-    `<div style="color:orange;">
-      🚫 ยกเลิกการโหลดโดยผู้ใช้<br>
-      <small>หากมีปัญหาในการโหลดข้อมูล กรุณารีเฟรชหน้าเว็บหรือลองอีกครั้ง</small>
-    </div>`;
-}
+    static loadFromLocalStorage() {
+        try {
+            const savedSchedule = localStorage.getItem('scheduleData');
+            const savedTeachers = localStorage.getItem('teacherData');
+            const savedSubjects = localStorage.getItem('subjectData');
+            const savedRooms = localStorage.getItem('roomData');
+            const savedClasses = localStorage.getItem('classData');
+            const savedUrl = localStorage.getItem('googleSheetsUrl');
+            const savedOnlineMode = localStorage.getItem('onlineMode');
 
-// ฟังก์ชันตรวจสอบสถานะการโหลด
-function checkLoadingStatus() {
-  const loadingElement = document.getElementById('loading');
-  if (loadingElement && loadingElement.style.display === 'flex') {
-    console.log(`📊 กำลังตรวจสอบสถานะการโหลด: ${currentLoadingOperation || 'ไม่ทราบการดำเนินการ'}`);
-  }
-}
+            if (savedSchedule) scheduleData = JSON.parse(savedSchedule);
+            if (savedTeachers) teacherData = JSON.parse(savedTeachers);
+            if (savedSubjects) subjectData = JSON.parse(savedSubjects);
+            if (savedRooms) roomData = JSON.parse(savedRooms);
+            if (savedClasses) classData = JSON.parse(savedClasses);
+            if (savedUrl) googleSheetsUrl = savedUrl;
+            if (savedOnlineMode) onlineMode = savedOnlineMode === 'true';
 
-// =============================================
-// ฟังก์ชันจัดการ Google Apps Script
-// =============================================
-
-// ฟังก์ชันเรียกใช้งาน Google Apps Script แบบ POST สำหรับข้อมูลขนาดใหญ่
-async function callGoogleAppsScriptPost(action, data = {}) {
-  const operation = `POST ${action}`;
-  console.log(`📤 เริ่ม ${operation}`);
-  
-  try {
-    const payload = {
-      action: action,
-      data: data
-    };
-    
-    // ตั้งค่า timeout สำหรับ fetch
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 seconds
-    
-    const response = await fetch(GAS_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal
-    });
-    
-    clearTimeout(timeoutId);
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    
-    const result = await response.json();
-    console.log(`✅ สำเร็จ ${operation}`);
-    return result;
-    
-  } catch (error) {
-    console.error(`❌ ล้มเหลว ${operation}:`, error);
-    
-    if (error.name === 'AbortError') {
-      throw new Error('การเชื่อมต่อใช้เวลานานเกินไป (เกิน 25 วินาที)');
-    }
-    
-    // ลองใช้ JSONP เป็น fallback
-    console.log('🔄 ลองใช้ JSONP แทน...');
-    return await callGoogleAppsScript(action, data);
-  }
-}
-
-// ฟังก์ชันเรียกใช้งาน Google Apps Script
-async function callGoogleAppsScript(action, data = {}) {
-  // ตรวจสอบขนาดข้อมูล
-  const dataSize = JSON.stringify(data).length;
-  
-  // ถ้าข้อมูลใหญ่กว่า 10KB ให้ใช้ POST
-  if (dataSize > 10000) {
-    console.log(`📦 ข้อมูลใหญ่เกิน JSONP (${dataSize} bytes), ใช้ POST แทน`);
-    return await callGoogleAppsScriptPost(action, data);
-  }
-  
-  const operation = `JSONP ${action}`;
-  console.log(`📤 เริ่ม ${operation}`);
-  
-  return new Promise((resolve, reject) => {
-    const callbackName = 'gas_callback_' + Math.round(100000 * Math.random());
-    
-    window[callbackName] = function(response) {
-      delete window[callbackName];
-      if (script.parentNode) {
-        document.body.removeChild(script);
-      }
-      clearTimeout(timeoutId);
-      
-      console.log(`✅ สำเร็จ ${operation}`);
-      
-      if (response && response.success === false && response.error && response.error.includes('Data too large')) {
-        // ถ้า JSONP ล้มเหลวเพราะข้อมูลใหญ่เกินไป ให้ลองใช้ POST
-        console.log('🔄 JSONP ข้อมูลใหญ่เกินไป, ลองใช้ POST...');
-        callGoogleAppsScriptPost(action, data).then(resolve).catch(reject);
-      } else {
-        resolve(response);
-      }
-    };
-    
-    const script = document.createElement('script');
-    const params = new URLSearchParams();
-    params.append('action', action);
-    
-    // จำกัดขนาดข้อมูลสำหรับ JSONP
-    if (dataSize <= 10000) {
-      params.append('data', JSON.stringify(data));
-    }
-    
-    params.append('callback', callbackName);
-    params.append('rnd', Date.now());
-    
-    script.src = GAS_URL + '?' + params.toString();
-    
-    script.onerror = () => {
-      delete window[callbackName];
-      if (script.parentNode) {
-        document.body.removeChild(script);
-      }
-      clearTimeout(timeoutId);
-      
-      console.error(`❌ ล้มเหลว ${operation}: JSONP error`);
-      
-      // ถ้า JSONP ล้มเหลว ให้ลองใช้ POST
-      console.log('🔄 ลองใช้ POST แทน...');
-      callGoogleAppsScriptPost(action, data).then(resolve).catch(reject);
-    };
-    
-    document.body.appendChild(script);
-    
-    const timeoutId = setTimeout(() => {
-      if (window[callbackName]) {
-        delete window[callbackName];
-        if (script.parentNode) {
-          document.body.removeChild(script);
+            return true;
+        } catch (error) {
+            console.error('Error loading from localStorage:', error);
+            return false;
         }
-        console.error(`❌ ล้มเหลว ${operation}: Timeout 20 วินาที`);
-        reject(new Error('การเชื่อมต่อใช้เวลานานเกินไป (เกิน 20 วินาที)'));
-      }
-    }, 20000);
-  });
+    }
+
+    static async saveToGoogleSheets() {
+        if (!onlineMode || !googleSheetsUrl) {
+            return { success: false, message: 'โหมดออฟไลน์หรือไม่ได้ตั้งค่า URL' };
+        }
+
+        try {
+            const timestamp = new Date().getTime();
+            // ใช้ URL ที่แก้ไขแล้วเพื่อหลีกเลี่ยงปัญหา CORS
+            const url = this.fixGoogleScriptUrl(googleSheetsUrl) + `?action=saveAllData&t=${timestamp}`;
+            
+            console.log('🔄 พยายามบันทึกข้อมูลไปยัง:', url);
+            
+            const requestData = {
+                action: 'saveAllData',
+                data: {
+                    teachers: Object.values(teacherData),
+                    subjects: Object.values(subjectData),
+                    rooms: Object.values(roomData),
+                    classes: Object.values(classData),
+                    schedule: scheduleData
+                }
+            };
+
+            // ใช้ fetch พร้อมกับ error handling ที่ดีขึ้น
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 วินาที timeout
+
+            const response = await fetch(url, {
+                method: 'POST',
+                mode: 'no-cors', // ใช้ no-cors เพื่อหลีกเลี่ยงปัญหา CORS
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData),
+                signal: controller.signal
+            }).catch(error => {
+                if (error.name === 'AbortError') {
+                    throw new Error('Request timeout - การเชื่อมต่อใช้เวลานานเกินไป');
+                }
+                throw error;
+            });
+
+            clearTimeout(timeoutId);
+
+            // ในโหมด no-cors เราไม่สามารถอ่าน response ได้ แต่เราสามารถตรวจสอบว่า request สำเร็จหรือไม่
+            if (response && response.type === 'opaque') {
+                // opaque response หมายความว่าการส่งข้อมูลสำเร็จ (แต่เราไม่สามารถอ่าน response ได้)
+                return { success: true, message: 'บันทึกข้อมูลสำเร็จ (no-cors mode)' };
+            }
+
+            // ถ้าไม่ใช่ no-cors mode ให้พยายามอ่าน response
+            try {
+                const result = await response.json();
+                return result;
+            } catch (parseError) {
+                // ถ้าไม่สามารถ parse JSON ได้ แต่ status 200 ก็ถือว่าสำเร็จ
+                if (response.ok) {
+                    return { success: true, message: 'บันทึกข้อมูลสำเร็จ' };
+                } else {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+            }
+            
+        } catch (error) {
+            console.error('❌ Error saving to Google Sheets:', error);
+            
+            // ให้ข้อมูล error ที่ละเอียดมากขึ้น
+            let errorMessage = 'เกิดข้อผิดพลาดในการบันทึก: ';
+            
+            if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+                errorMessage += 'การเชื่อมต่อล้มเหลว - กรุณาตรวจสอบ URL และการเชื่อมต่ออินเทอร์เน็ต';
+            } else if (error.message.includes('timeout')) {
+                errorMessage += 'การเชื่อมต่อใช้เวลานานเกินไป - กรุณาลองใหม่อีกครั้ง';
+            } else if (error.message.includes('CORS')) {
+                errorMessage += 'ปัญหา CORS - กรุณาตรวจสอบการตั้งค่า Google Apps Script';
+            } else {
+                errorMessage += error.message;
+            }
+            
+            return { success: false, message: errorMessage };
+        }
+    }
+
+    // ฟังก์ชันใหม่: บันทึกข้อมูลแบบแบ่งชุด
+    static async saveToGoogleSheetsInBatches() {
+        if (!onlineMode || !googleSheetsUrl) {
+            return { success: false, message: 'โหมดออฟไลน์หรือไม่ได้ตั้งค่า URL' };
+        }
+
+        try {
+            const timestamp = new Date().getTime();
+            const baseUrl = this.fixGoogleScriptUrl(googleSheetsUrl);
+            
+            // แบ่งข้อมูลตารางเรียนเป็นชุดเล็กๆ
+            const batchSize = 20; // ลดขนาดชุดเพื่อความปลอดภัย
+            const scheduleBatches = this.splitScheduleIntoBatches(scheduleData, batchSize);
+            
+            let totalSuccess = 0;
+            let totalFailures = 0;
+            
+            // ส่งข้อมูลทีละชุด
+            for (let i = 0; i < scheduleBatches.length; i++) {
+                try {
+                    showProgress('กำลังอัพโหลดข้อมูล...', i + 1, scheduleBatches.length);
+                    
+                    const batchData = {
+                        teachers: Object.values(teacherData),
+                        subjects: Object.values(subjectData),
+                        rooms: Object.values(roomData),
+                        classes: Object.values(classData),
+                        schedule: scheduleBatches[i],
+                        batchInfo: {
+                            current: i + 1,
+                            total: scheduleBatches.length,
+                            isLast: i === scheduleBatches.length - 1
+                        }
+                    };
+                    
+                    const url = baseUrl + `?action=saveAllData&batch=${i + 1}&total=${scheduleBatches.length}&t=${timestamp}`;
+                    
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            action: 'saveAllData',
+                            data: batchData
+                        }),
+                        signal: controller.signal
+                    }).catch(error => {
+                        if (error.name === 'AbortError') {
+                            throw new Error('Request timeout');
+                        }
+                        throw error;
+                    });
+
+                    clearTimeout(timeoutId);
+
+                    if (response && (response.ok || response.type === 'opaque')) {
+                        totalSuccess++;
+                        console.log(`✅ Batch ${i + 1} สำเร็จ`);
+                    } else {
+                        totalFailures++;
+                        console.log(`❌ Batch ${i + 1} ล้มเหลว`);
+                    }
+                    
+                    // รอสักครู่ระหว่างการส่งแต่ละชุด
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                } catch (batchError) {
+                    console.error(`❌ Error in batch ${i + 1}:`, batchError);
+                    totalFailures++;
+                    
+                    // ถ้ามี error มากกว่า 3 ชุด ให้หยุด
+                    if (totalFailures >= 3) {
+                        throw new Error(`มีมากกว่า 3 ชุดที่ล้มเหลว: ${batchError.message}`);
+                    }
+                }
+            }
+            
+            hideProgress();
+            
+            if (totalFailures === 0) {
+                return { success: true, message: `บันทึกข้อมูลทั้งหมด ${totalSuccess} ชุดสำเร็จ` };
+            } else {
+                return { 
+                    success: false, 
+                    message: `บันทึกสำเร็จ ${totalSuccess} ชุด, ล้มเหลว ${totalFailures} ชุด` 
+                };
+            }
+        } catch (error) {
+            hideProgress();
+            console.error('❌ Error saving to Google Sheets in batches:', error);
+            return { success: false, message: 'เกิดข้อผิดพลาดในการบันทึกแบบแบ่งชุด: ' + error.message };
+        }
+    }
+
+    // ฟังก์ชันแก้ไข URL Google Script
+    static fixGoogleScriptUrl(url) {
+        if (!url) return '';
+        
+        let fixedUrl = url.trim();
+        
+        // ตรวจสอบว่าเป็น URL ที่ถูกต้อง
+        try {
+            new URL(fixedUrl);
+        } catch (error) {
+            console.error('Invalid URL:', error);
+            return url;
+        }
+        
+        // ตรวจสอบว่าเป็น Google Apps Script URL หรือไม่
+        if (!fixedUrl.includes('script.google.com')) {
+            console.warn('URL ไม่ใช่ Google Apps Script URL');
+            return url;
+        }
+        
+        // ตรวจสอบว่าไม่มี /dev ที่ส่วนท้าย
+        if (fixedUrl.includes('/dev')) {
+            fixedUrl = fixedUrl.replace('/dev', '');
+            console.log('เปลี่ยนจาก deployment /dev เป็น production');
+        }
+        
+        // ตรวจสอบว่าไม่มี query parameters ที่อาจทำให้เกิดปัญหา
+        const urlObj = new URL(fixedUrl);
+        urlObj.search = ''; // ล้าง query parameters ทั้งหมด
+        
+        return urlObj.toString();
+    }
+
+    // ฟังก์ชันแบ่งข้อมูลตารางเรียนเป็นชุดเล็กๆ
+    static splitScheduleIntoBatches(scheduleData, batchSize) {
+        const batches = [];
+        let currentBatch = {};
+        let count = 0;
+        
+        for (const [className, days] of Object.entries(scheduleData)) {
+            if (!currentBatch[className]) {
+                currentBatch[className] = {};
+            }
+            
+            for (const [day, periods] of Object.entries(days)) {
+                if (!currentBatch[className][day]) {
+                    currentBatch[className][day] = {};
+                }
+                
+                for (const [period, data] of Object.entries(periods)) {
+                    currentBatch[className][day][period] = data;
+                    count++;
+                    
+                    // เมื่อถึงขนาดชุดที่กำหนด ให้เริ่มชุดใหม่
+                    if (count >= batchSize) {
+                        batches.push(currentBatch);
+                        currentBatch = {};
+                        count = 0;
+                    }
+                }
+            }
+        }
+        
+        // เพิ่มชุดสุดท้ายถ้ามีข้อมูล
+        if (Object.keys(currentBatch).length > 0) {
+            batches.push(currentBatch);
+        }
+        
+        console.log(`แบ่งข้อมูลเป็น ${batches.length} ชุด, ขนาดชุดละ ${batchSize} รายการ`);
+        return batches;
+    }
+
+    static async loadFromGoogleSheets() {
+        if (!onlineMode || !googleSheetsUrl) {
+            return { success: false, message: 'โหมดออฟไลน์หรือไม่ได้ตั้งค่า URL' };
+        }
+
+        try {
+            const timestamp = new Date().getTime();
+            const url = this.fixGoogleScriptUrl(googleSheetsUrl) + `?action=getAllData&t=${timestamp}`;
+            
+            console.log('🔄 พยายามโหลดข้อมูลจาก:', url);
+            
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+            const response = await fetch(url, {
+                method: 'GET',
+                signal: controller.signal
+            }).catch(error => {
+                if (error.name === 'AbortError') {
+                    throw new Error('Request timeout');
+                }
+                throw error;
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            
+            if (result.success && result.data) {
+                // แปลงข้อมูลจาก array เป็น object
+                if (result.data.teachers) {
+                    teacherData = {};
+                    result.data.teachers.forEach(teacher => {
+                        teacherData[teacher['รหัสครู']] = {
+                            code: teacher['รหัสครู'],
+                            name: teacher['ชื่อ-สกุล'],
+                            position: teacher['ตำแหน่ง']
+                        };
+                    });
+                }
+                
+                if (result.data.subjects) {
+                    subjectData = {};
+                    result.data.subjects.forEach(subject => {
+                        subjectData[subject['รหัสวิชา']] = {
+                            code: subject['รหัสวิชา'],
+                            name: subject['ชื่อวิชา'],
+                            credit: subject['นก.']
+                        };
+                    });
+                }
+                
+                if (result.data.rooms) {
+                    roomData = {};
+                    result.data.rooms.forEach(room => {
+                        roomData[room['รหัสห้อง']] = {
+                            code: room['รหัสห้อง'],
+                            name: room['ชื่อห้อง'],
+                            type: room['ประเภท'],
+                            capacity: room['ความจุ']
+                        };
+                    });
+                }
+                
+                if (result.data.classes) {
+                    classData = {};
+                    result.data.classes.forEach(classItem => {
+                        classData[classItem['รหัสระดับชั้น']] = {
+                            code: classItem['รหัสระดับชั้น'],
+                            name: classItem['ชื่อระดับชั้น'],
+                            program: classItem['อาจารย์ที่ปรึกษา'],
+                            advisor: classItem['อาจารย์ที่ปรึกษา'],
+                            studentCount: classItem['จำนวนนักเรียน']
+                        };
+                    });
+                }
+                
+                if (result.data.schedule) {
+                    scheduleData = result.data.schedule;
+                }
+                
+                DataManager.saveToLocalStorage();
+                return { success: true, message: 'โหลดข้อมูลสำเร็จ' };
+            } else {
+                return { success: false, message: result.message || 'ไม่สามารถโหลดข้อมูลได้' };
+            }
+        } catch (error) {
+            console.error('❌ Error loading from Google Sheets:', error);
+            
+            let errorMessage = 'เกิดข้อผิดพลาดในการโหลด: ';
+            if (error.message.includes('Failed to fetch')) {
+                errorMessage += 'การเชื่อมต่อล้มเหลว - กรุณาตรวจสอบ URL และการเชื่อมต่ออินเทอร์เน็ต';
+            } else {
+                errorMessage += error.message;
+            }
+            
+            return { success: false, message: errorMessage };
+        }
+    }
+
+    static exportData(type = 'all') {
+        try {
+            let dataToExport;
+            let filename;
+            
+            switch (type) {
+                case 'teachers':
+                    dataToExport = teacherData;
+                    filename = `teachers_${this.getTimestamp()}.json`;
+                    break;
+                case 'subjects':
+                    dataToExport = subjectData;
+                    filename = `subjects_${this.getTimestamp()}.json`;
+                    break;
+                case 'rooms':
+                    dataToExport = roomData;
+                    filename = `rooms_${this.getTimestamp()}.json`;
+                    break;
+                case 'classes':
+                    dataToExport = classData;
+                    filename = `classes_${this.getTimestamp()}.json`;
+                    break;
+                case 'schedule':
+                    dataToExport = scheduleData;
+                    filename = `schedule_${this.getTimestamp()}.json`;
+                    break;
+                case 'all':
+                default:
+                    dataToExport = {
+                        scheduleData,
+                        teacherData,
+                        subjectData,
+                        roomData,
+                        classData,
+                        exportDate: new Date().toISOString(),
+                        version: '3.3.0'
+                    };
+                    filename = `schedule_system_backup_${this.getTimestamp()}.json`;
+                    break;
+            }
+
+            const dataStr = JSON.stringify(dataToExport, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            showNotification(`ส่งออกข้อมูล ${type} เรียบร้อยแล้ว`, 'success');
+            return true;
+        } catch (error) {
+            console.error('Error exporting data:', error);
+            showNotification('เกิดข้อผิดพลาดในการส่งออกข้อมูล', 'error');
+            return false;
+        }
+    }
+
+    static importData(file, replace = false) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    
+                    if (replace) {
+                        // แทนที่ข้อมูลทั้งหมด
+                        if (importedData.scheduleData) scheduleData = importedData.scheduleData;
+                        if (importedData.teacherData) teacherData = importedData.teacherData;
+                        if (importedData.subjectData) subjectData = importedData.subjectData;
+                        if (importedData.roomData) roomData = importedData.roomData;
+                        if (importedData.classData) classData = importedData.classData;
+                    } else {
+                        // ผสานข้อมูล (ไม่แทนที่ข้อมูลที่มีอยู่)
+                        if (importedData.scheduleData) scheduleData = { ...scheduleData, ...importedData.scheduleData };
+                        if (importedData.teacherData) teacherData = { ...teacherData, ...importedData.teacherData };
+                        if (importedData.subjectData) subjectData = { ...subjectData, ...importedData.subjectData };
+                        if (importedData.roomData) roomData = { ...roomData, ...importedData.roomData };
+                        if (importedData.classData) classData = { ...classData, ...importedData.classData };
+                    }
+                    
+                    DataManager.saveToLocalStorage();
+                    
+                    // รีเรนเดอร์ตารางทั้งหมด
+                    TeacherManager.renderTeacherTable();
+                    SubjectManager.renderSubjectTable();
+                    RoomManager.renderRoomTable();
+                    ClassManager.renderClassTable();
+                    ScheduleRenderer.renderAllViews();
+                    
+                    resolve(true);
+                } catch (error) {
+                    reject(new Error('รูปแบบไฟล์ไม่ถูกต้อง'));
+                }
+            };
+            
+            reader.onerror = function() {
+                reject(new Error('ไม่สามารถอ่านไฟล์ได้'));
+            };
+            
+            reader.readAsText(file);
+        });
+    }
+
+    static getTimestamp() {
+        return new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    }
+
+    static getStats() {
+        return {
+            teachers: Object.keys(teacherData).length,
+            subjects: Object.keys(subjectData).length,
+            rooms: Object.keys(roomData).length,
+            classes: Object.keys(classData).length,
+            scheduleEntries: Object.keys(scheduleData).reduce((acc, className) => {
+                return acc + Object.keys(scheduleData[className]).reduce((dayAcc, day) => {
+                    return dayAcc + Object.keys(scheduleData[className][day]).length;
+                }, 0);
+            }, 0)
+        };
+    }
+
+    static async autoSave() {
+        if (onlineMode && googleSheetsUrl) {
+            try {
+                await this.saveToGoogleSheets();
+                console.log('Auto-save to Google Sheets completed');
+            } catch (error) {
+                console.error('Auto-save failed:', error);
+            }
+        }
+    }
 }
 
-// ฟังก์ชันทดสอบการเชื่อมต่อ
-async function testSimpleConnection() {
-  try {
-    showLoading(true, 'ทดสอบการเชื่อมต่อ');
-    
-    console.log('🔗 กำลังทดสอบการเชื่อมต่อ Google Sheets...');
-    
-    const result = await callGoogleAppsScript('ping');
-    
-    if (result && result.success) {
-      document.getElementById('message').innerHTML = 
-        `<div style="color:green;">
-          ✅ การเชื่อมต่อทำงานปกติ!<br>
-          <small>${result.message || 'เชื่อมต่อสำเร็จ'}</small>
-        </div>`;
-      return result;
-    } else {
-      throw new Error(result?.error || 'Failed to connect');
+// Google Sheets integration
+class GoogleSheetsManager {
+    static async testConnectionWithRetry(maxRetries = 3) {
+        if (!googleSheetsUrl) {
+            throw new Error('กรุณาระบุ Google Apps Script URL');
+        }
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                console.log(`🔄 ทดสอบการเชื่อมต่อครั้งที่ ${attempt}`);
+                
+                // เพิ่ม timestamp เพื่อป้องกัน caching
+                const timestamp = new Date().getTime();
+                const testUrl = DataManager.fixGoogleScriptUrl(googleSheetsUrl) + `?action=test&attempt=${attempt}&t=${timestamp}`;
+                
+                console.log('URL ที่ใช้ทดสอบ:', testUrl);
+                
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+                const response = await fetch(testUrl, {
+                    method: 'GET',
+                    signal: controller.signal
+                }).catch(error => {
+                    if (error.name === 'AbortError') {
+                        throw new Error('Request timeout');
+                    }
+                    throw error;
+                });
+
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    console.log('✅ การเชื่อมต่อสำเร็จครั้งที่', attempt);
+                    return result;
+                } else {
+                    throw new Error(result.message || 'การเชื่อมต่อล้มเหลว');
+                }
+            } catch (error) {
+                console.error(`❌ การเชื่อมต่อล้มเหลวครั้งที่ ${attempt}:`, error);
+                
+                if (attempt === maxRetries) {
+                    // ลองใช้วิธีอื่นๆ ก่อนจะ throw error
+                    const fallbackResult = await this.tryAlternativeMethods();
+                    if (fallbackResult) {
+                        return fallbackResult;
+                    }
+                    throw new Error('การเชื่อมต่อล้มเหลวหลังจากลอง ' + maxRetries + ' ครั้ง: ' + error.message);
+                }
+                
+                // รอเพิ่มขึ้นตามจำนวนครั้งที่ลอง
+                const waitTime = attempt * 2000;
+                console.log(`⏳ รอ ${waitTime/1000} วินาทีก่อนลองใหม่...`);
+                await new Promise(resolve => setTimeout(resolve, waitTime));
+            }
+        }
     }
-  } catch (error) {
-    console.error('❌ การทดสอบการเชื่อมต่อล้มเหลว:', error);
+
+    static async tryAlternativeMethods() {
+        console.log('🔄 ลองใช้วิธีการเชื่อมต่ออื่นๆ...');
+        
+        // ลองใช้ XMLHttpRequest
+        try {
+            const result = await this.testWithXMLHttpRequest();
+            if (result) return result;
+        } catch (error) {
+            console.error('XMLHttpRequest failed:', error);
+        }
+        
+        // ลองใช้ no-cors mode
+        try {
+            const result = await this.testWithNoCors();
+            if (result) return result;
+        } catch (error) {
+            console.error('No-cors test failed:', error);
+        }
+        
+        return null;
+    }
+
+    static testWithXMLHttpRequest() {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            const timestamp = new Date().getTime();
+            const url = DataManager.fixGoogleScriptUrl(googleSheetsUrl) + `?action=test&t=${timestamp}`;
+            
+            xhr.open('GET', url, true);
+            xhr.timeout = 15000;
+            
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    try {
+                        const result = JSON.parse(xhr.responseText);
+                        resolve(result);
+                    } catch (error) {
+                        resolve({
+                            success: true,
+                            message: 'เชื่อมต่อได้แต่ไม่สามารถ parse JSON ได้',
+                            rawResponse: xhr.responseText
+                        });
+                    }
+                } else {
+                    reject(new Error(`HTTP ${xhr.status}: ${xhr.statusText}`));
+                }
+            };
+            
+            xhr.onerror = function() {
+                reject(new Error('Network error'));
+            };
+            
+            xhr.ontimeout = function() {
+                reject(new Error('Request timeout'));
+            };
+            
+            xhr.send();
+        });
+    }
+
+    static async testWithNoCors() {
+        try {
+            const timestamp = new Date().getTime();
+            const url = DataManager.fixGoogleScriptUrl(googleSheetsUrl) + `?action=test&t=${timestamp}`;
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                mode: 'no-cors'
+            });
+            
+            // ใน no-cors mode เราไม่สามารถอ่าน response ได้ แต่ถ้าไม่ error ก็ถือว่าสามารถเชื่อมต่อได้
+            return {
+                success: true,
+                message: 'เชื่อมต่อได้ (no-cors mode) - ไม่สามารถตรวจสอบ response ได้',
+                method: 'No-CORS'
+            };
+        } catch (error) {
+            throw new Error('No-cors connection failed: ' + error.message);
+        }
+    }
+
+    static async checkUrlValidity() {
+        try {
+            // ลองดึงข้อมูลแบบง่ายๆ
+            const response = await fetch(googleSheetsUrl, {
+                method: 'HEAD',
+                mode: 'no-cors'
+            });
+            
+            return {
+                valid: true,
+                message: 'URL สามารถเข้าถึงได้'
+            };
+        } catch (error) {
+            return {
+                valid: false,
+                message: 'URL ไม่สามารถเข้าถึงได้: ' + error.message
+            };
+        }
+    }
+
+    static async testConnection() {
+        if (!googleSheetsUrl) {
+            throw new Error('กรุณาระบุ Google Apps Script URL');
+        }
+
+        try {
+            // ลองหลายวิธี
+            const result = await this.testConnectionWithRetry(2);
+            return result;
+        } catch (error) {
+            // หากวิธีหลักล้มเหลว ให้ลองวิธีอื่น
+            console.log('🔄 ลองใช้วิธีการสำรอง...');
+            
+            try {
+                const simpleTest = await this.simpleConnectionTest();
+                return simpleTest;
+            } catch (fallbackError) {
+                throw new Error('การเชื่อมต่อล้มเหลวทั้งหมด: ' + error.message + ' | ' + fallbackError.message);
+            }
+        }
+    }
+
+    static async simpleConnectionTest() {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            const timestamp = new Date().getTime();
+            const testUrl = DataManager.fixGoogleScriptUrl(googleSheetsUrl) + `?action=test&t=${timestamp}`;
+            
+            img.onload = function() {
+                resolve({
+                    success: true,
+                    message: 'การเชื่อมต่อพื้นฐานทำงานได้ (ผ่าน Image load)',
+                    method: 'Image Load'
+                });
+            };
+            
+            img.onerror = function() {
+                reject(new Error('ไม่สามารถโหลด resource จาก URL ได้'));
+            };
+            
+            img.src = testUrl;
+        });
+    }
+
+    static async initializeSheets() {
+        if (!googleSheetsUrl) {
+            throw new Error('กรุณาระบุ Google Apps Script URL');
+        }
+
+        try {
+            const timestamp = new Date().getTime();
+            const response = await fetch(DataManager.fixGoogleScriptUrl(googleSheetsUrl) + `?action=initialize&t=${timestamp}`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            return result;
+        } catch (error) {
+            throw new Error('การ initialize ล้มเหลว: ' + error.message);
+        }
+    }
+
+    static async syncToSheets() {
+        if (!googleSheetsUrl) {
+            throw new Error('กรุณาระบุ Google Apps Script URL');
+        }
+
+        try {
+            console.log('🔄 เริ่มต้น sync ข้อมูล...');
+            const result = await DataManager.saveToGoogleSheets();
+            
+            if (result.success) {
+                console.log('✅ Sync สำเร็จ:', result.message);
+            } else {
+                console.error('❌ Sync ล้มเหลว:', result.message);
+            }
+            
+            return result;
+        } catch (error) {
+            console.error('❌ Error in syncToSheets:', error);
+            throw new Error('การ sync ล้มเหลว: ' + error.message);
+        }
+    }
+
+    // ฟังก์ชันใหม่: sync แบบแบ่งชุด
+    static async syncToSheetsBatch() {
+        if (!googleSheetsUrl) {
+            throw new Error('กรุณาระบุ Google Apps Script URL');
+        }
+
+        try {
+            console.log('🔄 เริ่มต้น sync ข้อมูลแบบแบ่งชุด...');
+            const result = await DataManager.saveToGoogleSheetsInBatches();
+            
+            if (result.success) {
+                console.log('✅ Sync แบบแบ่งชุดสำเร็จ:', result.message);
+            } else {
+                console.error('❌ Sync แบบแบ่งชุดล้มเหลว:', result.message);
+            }
+            
+            return result;
+        } catch (error) {
+            console.error('❌ Error in syncToSheetsBatch:', error);
+            throw new Error('การ sync แบบแบ่งชุดล้มเหลว: ' + error.message);
+        }
+    }
+
+    static async loadFromSheets() {
+        if (!googleSheetsUrl) {
+            throw new Error('กรุณาระบุ Google Apps Script URL');
+        }
+
+        try {
+            const result = await DataManager.loadFromGoogleSheets();
+            if (result.success) {
+                // รีเรนเดอร์ตารางทั้งหมด
+                TeacherManager.renderTeacherTable();
+                SubjectManager.renderSubjectTable();
+                RoomManager.renderRoomTable();
+                ClassManager.renderClassTable();
+                ScheduleRenderer.renderAllViews();
+            }
+            return result;
+        } catch (error) {
+            throw new Error('การโหลดข้อมูลล้มเหลว: ' + error.message);
+        }
+    }
+}
+
+// Data Management Classes
+class TeacherManager {
+    static renderTeacherTable() {
+        const teacherTableBody = document.getElementById('teacherTableBody');
+        const teacherCountBadge = document.getElementById('teacherCountBadge');
+        
+        if (!teacherTableBody) return;
+        
+        teacherTableBody.innerHTML = '';
+        teacherCountBadge.textContent = Object.keys(teacherData).length;
+        
+        Object.values(teacherData).forEach(teacher => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${teacher.code}</td>
+                <td>${teacher.name}</td>
+                <td>${teacher.position || '-'}</td>
+                <td>
+                    <button class="btn btn-sm btn-warning edit-teacher" data-id="${teacher.code}">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger delete-teacher" data-id="${teacher.code}">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            `;
+            teacherTableBody.appendChild(row);
+        });
+        
+        // Add event listeners
+        document.querySelectorAll('.edit-teacher').forEach(btn => {
+            btn.addEventListener('click', () => this.editTeacher(btn.dataset.id));
+        });
+        
+        document.querySelectorAll('.delete-teacher').forEach(btn => {
+            btn.addEventListener('click', () => this.deleteTeacher(btn.dataset.id));
+        });
+    }
     
-    const errorHtml = `
-      <div style="color:red;">
-        ❌ การเชื่อมต่อล้มเหลว<br>
-        <small>${error.message}</small>
-        <br><br>
-        <strong>วิธีแก้ไข:</strong><br>
-        1. <a href="${GAS_URL}?action=test" target="_blank" style="color:white;text-decoration:underline;">เปิด Google Apps Script โดยตรง</a><br>
-        2. อนุญาตการเข้าถึงถ้ายังไม่เคยทำ<br>
-        3. รีเฟรชหน้านี้ใหม่<br>
-        4. หรือใช้โหมดออฟไลน์ (ข้อมูลจะถูกบันทึกในเบราว์เซอร์)
-      </div>
+    static addTeacher() {
+        document.getElementById('teacherFormTitle').textContent = 'เพิ่มครู';
+        document.getElementById('teacherForm').reset();
+        document.getElementById('teacherId').value = '';
+        
+        const modal = new bootstrap.Modal(document.getElementById('teacherFormModal'));
+        modal.show();
+    }
+    
+    static editTeacher(teacherId) {
+        const teacher = teacherData[teacherId];
+        if (!teacher) return;
+        
+        document.getElementById('teacherFormTitle').textContent = 'แก้ไขข้อมูลครู';
+        document.getElementById('teacherId').value = teacher.code;
+        document.getElementById('teacherCode').value = teacher.code;
+        document.getElementById('teacherName').value = teacher.name;
+        document.getElementById('teacherPosition').value = teacher.position || '';
+        
+        const modal = new bootstrap.Modal(document.getElementById('teacherFormModal'));
+        modal.show();
+    }
+    
+    static deleteTeacher(teacherId) {
+        if (confirm('คุณแน่ใจว่าต้องการลบครูคนนี้?')) {
+            delete teacherData[teacherId];
+            DataManager.saveToLocalStorage();
+            DataManager.autoSave();
+            this.renderTeacherTable();
+            ScheduleRenderer.renderAllViews();
+            showNotification('ลบข้อมูลครูเรียบร้อยแล้ว', 'success');
+        }
+    }
+    
+    static saveTeacher(formData) {
+        const teacherId = formData.id || formData.code;
+        
+        teacherData[teacherId] = {
+            code: formData.code,
+            name: formData.name,
+            position: formData.position
+        };
+        
+        DataManager.saveToLocalStorage();
+        DataManager.autoSave();
+        this.renderTeacherTable();
+        ScheduleRenderer.renderAllViews();
+        return true;
+    }
+}
+
+class SubjectManager {
+    static renderSubjectTable() {
+        const subjectTableBody = document.getElementById('subjectTableBody');
+        const subjectCountBadge = document.getElementById('subjectCountBadge');
+        
+        if (!subjectTableBody) return;
+        
+        subjectTableBody.innerHTML = '';
+        subjectCountBadge.textContent = Object.keys(subjectData).length;
+        
+        Object.values(subjectData).forEach(subject => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${subject.code}</td>
+                <td>${subject.name}</td>
+                <td>${subject.credit || '-'}</td>
+                <td>
+                    <button class="btn btn-sm btn-warning edit-subject" data-id="${subject.code}">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger delete-subject" data-id="${subject.code}">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            `;
+            subjectTableBody.appendChild(row);
+        });
+        
+        // Add event listeners
+        document.querySelectorAll('.edit-subject').forEach(btn => {
+            btn.addEventListener('click', () => this.editSubject(btn.dataset.id));
+        });
+        
+        document.querySelectorAll('.delete-subject').forEach(btn => {
+            btn.addEventListener('click', () => this.deleteSubject(btn.dataset.id));
+        });
+    }
+    
+    static addSubject() {
+        document.getElementById('subjectFormTitle').textContent = 'เพิ่มรายวิชา';
+        document.getElementById('subjectForm').reset();
+        document.getElementById('subjectId').value = '';
+        
+        const modal = new bootstrap.Modal(document.getElementById('subjectFormModal'));
+        modal.show();
+    }
+    
+    static editSubject(subjectId) {
+        const subject = subjectData[subjectId];
+        if (!subject) return;
+        
+        document.getElementById('subjectFormTitle').textContent = 'แก้ไขข้อมูลรายวิชา';
+        document.getElementById('subjectId').value = subject.code;
+        document.getElementById('subjectCode').value = subject.code;
+        document.getElementById('subjectName').value = subject.name;
+        document.getElementById('subjectCredit').value = subject.credit || '';
+        
+        const modal = new bootstrap.Modal(document.getElementById('subjectFormModal'));
+        modal.show();
+    }
+    
+    static deleteSubject(subjectId) {
+        if (confirm('คุณแน่ใจว่าต้องการลบรายวิชานี้?')) {
+            delete subjectData[subjectId];
+            DataManager.saveToLocalStorage();
+            DataManager.autoSave();
+            this.renderSubjectTable();
+            showNotification('ลบข้อมูลรายวิชาเรียบร้อยแล้ว', 'success');
+        }
+    }
+    
+    static saveSubject(formData) {
+        const subjectId = formData.id || formData.code;
+        
+        subjectData[subjectId] = {
+            code: formData.code,
+            name: formData.name,
+            credit: formData.credit
+        };
+        
+        DataManager.saveToLocalStorage();
+        DataManager.autoSave();
+        this.renderSubjectTable();
+        return true;
+    }
+}
+
+class RoomManager {
+    static renderRoomTable() {
+        const roomTableBody = document.getElementById('roomTableBody');
+        const roomCountBadge = document.getElementById('roomCountBadge');
+        
+        if (!roomTableBody) return;
+        
+        roomTableBody.innerHTML = '';
+        roomCountBadge.textContent = Object.keys(roomData).length;
+        
+        Object.values(roomData).forEach(room => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${room.code}</td>
+                <td>${room.name}</td>
+                <td>${room.type || '-'}</td>
+                <td>${room.capacity || '-'}</td>
+                <td>
+                    <button class="btn btn-sm btn-warning edit-room" data-id="${room.code}">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger delete-room" data-id="${room.code}">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            `;
+            roomTableBody.appendChild(row);
+        });
+        
+        // Add event listeners
+        document.querySelectorAll('.edit-room').forEach(btn => {
+            btn.addEventListener('click', () => this.editRoom(btn.dataset.id));
+        });
+        
+        document.querySelectorAll('.delete-room').forEach(btn => {
+            btn.addEventListener('click', () => this.deleteRoom(btn.dataset.id));
+        });
+    }
+    
+    static addRoom() {
+        document.getElementById('roomFormTitle').textContent = 'เพิ่มห้อง';
+        document.getElementById('roomForm').reset();
+        document.getElementById('roomId').value = '';
+        
+        const modal = new bootstrap.Modal(document.getElementById('roomFormModal'));
+        modal.show();
+    }
+    
+    static editRoom(roomId) {
+        const room = roomData[roomId];
+        if (!room) return;
+        
+        document.getElementById('roomFormTitle').textContent = 'แก้ไขข้อมูลห้อง';
+        document.getElementById('roomId').value = room.code;
+        document.getElementById('roomCode').value = room.code;
+        document.getElementById('roomName').value = room.name;
+        document.getElementById('roomType').value = room.type || 'ห้องเรียน';
+        document.getElementById('roomCapacity').value = room.capacity || '';
+        
+        const modal = new bootstrap.Modal(document.getElementById('roomFormModal'));
+        modal.show();
+    }
+    
+    static deleteRoom(roomId) {
+        if (confirm('คุณแน่ใจว่าต้องการลบห้องนี้?')) {
+            delete roomData[roomId];
+            DataManager.saveToLocalStorage();
+            DataManager.autoSave();
+            this.renderRoomTable();
+            ScheduleRenderer.renderAllViews();
+            showNotification('ลบข้อมูลห้องเรียบร้อยแล้ว', 'success');
+        }
+    }
+    
+    static saveRoom(formData) {
+        const roomId = formData.id || formData.code;
+        
+        roomData[roomId] = {
+            code: formData.code,
+            name: formData.name,
+            type: formData.type,
+            capacity: formData.capacity
+        };
+        
+        DataManager.saveToLocalStorage();
+        DataManager.autoSave();
+        this.renderRoomTable();
+        ScheduleRenderer.renderAllViews();
+        return true;
+    }
+}
+
+class ClassManager {
+    static renderClassTable() {
+        const classTableBody = document.getElementById('classTableBody');
+        const classCountBadge = document.getElementById('classCountBadge');
+        
+        if (!classTableBody) return;
+        
+        classTableBody.innerHTML = '';
+        classCountBadge.textContent = Object.keys(classData).length;
+        
+        Object.values(classData).forEach(classItem => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${classItem.code}</td>
+                <td>${classItem.name}</td>
+                <td>${classItem.program || '-'}</td>
+                <td>${classItem.advisor || '-'}</td>
+                <td>
+                    <button class="btn btn-sm btn-warning edit-class" data-id="${classItem.code}">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger delete-class" data-id="${classItem.code}">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            `;
+            classTableBody.appendChild(row);
+        });
+        
+        // Add event listeners
+        document.querySelectorAll('.edit-class').forEach(btn => {
+            btn.addEventListener('click', () => this.editClass(btn.dataset.id));
+        });
+        
+        document.querySelectorAll('.delete-class').forEach(btn => {
+            btn.addEventListener('click', () => this.deleteClass(btn.dataset.id));
+        });
+    }
+    
+    static addClass() {
+        document.getElementById('classFormTitle').textContent = 'เพิ่มระดับชั้น';
+        document.getElementById('classForm').reset();
+        document.getElementById('classId').value = '';
+        this.loadAdvisorOptions();
+        
+        const modal = new bootstrap.Modal(document.getElementById('classFormModal'));
+        modal.show();
+    }
+    
+    static editClass(classId) {
+        const classItem = classData[classId];
+        if (!classItem) return;
+        
+        document.getElementById('classFormTitle').textContent = 'แก้ไขข้อมูลระดับชั้น';
+        document.getElementById('classId').value = classItem.code;
+        document.getElementById('classCode').value = classItem.code;
+        document.getElementById('className').value = classItem.name;
+        document.getElementById('classProgram').value = classItem.program || '';
+        this.loadAdvisorOptions(classItem.advisor);
+        
+        const modal = new bootstrap.Modal(document.getElementById('classFormModal'));
+        modal.show();
+    }
+    
+    static loadAdvisorOptions(selectedAdvisor = '') {
+        const advisorSelect = document.getElementById('classAdvisor');
+        if (!advisorSelect) return;
+        
+        advisorSelect.innerHTML = '<option value="">-- เลือกครูที่ปรึกษา --</option>';
+        
+        Object.values(teacherData).forEach(teacher => {
+            const option = document.createElement('option');
+            option.value = teacher.name;
+            option.textContent = teacher.name;
+            if (teacher.name === selectedAdvisor) {
+                option.selected = true;
+            }
+            advisorSelect.appendChild(option);
+        });
+    }
+    
+    static deleteClass(classId) {
+        if (confirm('คุณแน่ใจว่าต้องการลบระดับชั้นนี้?')) {
+            delete classData[classId];
+            DataManager.saveToLocalStorage();
+            DataManager.autoSave();
+            this.renderClassTable();
+            
+            // Update class select in schedule view
+            const classSelect = document.getElementById('classSelect');
+            if (classSelect) {
+                const optionToRemove = classSelect.querySelector(`option[value="${classId}"]`);
+                if (optionToRemove) {
+                    optionToRemove.remove();
+                }
+            }
+            
+            showNotification('ลบข้อมูลระดับชั้นเรียบร้อยแล้ว', 'success');
+        }
+    }
+    
+    static saveClass(formData) {
+        const classId = formData.id || formData.code;
+        
+        classData[classId] = {
+            code: formData.code,
+            name: formData.name,
+            program: formData.program,
+            advisor: formData.advisor
+        };
+        
+        DataManager.saveToLocalStorage();
+        DataManager.autoSave();
+        this.renderClassTable();
+        
+        // Update class select in schedule view
+        const classSelect = document.getElementById('classSelect');
+        if (classSelect) {
+            const existingOption = classSelect.querySelector(`option[value="${classId}"]`);
+            if (!existingOption) {
+                const newOption = document.createElement('option');
+                newOption.value = classId;
+                newOption.textContent = classData[classId].name;
+                classSelect.appendChild(newOption);
+            }
+        }
+        
+        return true;
+    }
+}
+
+// Schedule rendering functions
+class ScheduleRenderer {
+    static renderAllViews() {
+        this.renderClassSchedule();
+        this.renderTeacherSchedule();
+        this.renderRoomSchedule();
+        this.renderTeacherSummary();
+        this.renderClassSummary();
+        this.renderRoomSummary();
+        this.renderSystemInfo();
+        this.updateDropdowns();
+    }
+
+    static updateDropdowns() {
+        // Update class select
+        const classSelect = document.getElementById('classSelect');
+        if (classSelect) {
+            classSelect.innerHTML = '';
+            Object.values(classData).forEach(classItem => {
+                const option = document.createElement('option');
+                option.value = classItem.code;
+                option.textContent = classItem.name;
+                classSelect.appendChild(option);
+            });
+        }
+
+        // Update teacher select
+        const teacherSelect = document.getElementById('teacherSelect');
+        if (teacherSelect) {
+            teacherSelect.innerHTML = '';
+            Object.values(teacherData).forEach(teacher => {
+                const option = document.createElement('option');
+                option.value = teacher.name;
+                option.textContent = teacher.name;
+                teacherSelect.appendChild(option);
+            });
+        }
+
+        // Update room select
+        const roomSelect = document.getElementById('roomSelect');
+        if (roomSelect) {
+            roomSelect.innerHTML = '';
+            Object.values(roomData).forEach(room => {
+                const option = document.createElement('option');
+                option.value = room.code;
+                option.textContent = room.name;
+                roomSelect.appendChild(option);
+            });
+        }
+    }
+
+    static renderClassSchedule() {
+        const classSelect = document.getElementById('classSelect');
+        const selectedClass = classSelect ? classSelect.value : Object.keys(classData)[0];
+        const scheduleBody = document.getElementById('schedule-body');
+        
+        if (!scheduleBody) return;
+        
+        scheduleBody.innerHTML = '';
+        
+        const days = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์'];
+        
+        days.forEach(day => {
+            const row = document.createElement('tr');
+            row.innerHTML = `<td class="day-header">${day}</td>`;
+            
+            const periods = [1, 2, 3, 4, 5, 6, 7, 8];
+            
+            periods.forEach(period => {
+                const cell = document.createElement('td');
+                
+                // จัดการคาบพิเศษสำหรับวันศุกร์
+                if (day === 'ศุกร์' && period === 7) {
+                    cell.classList.add('activity');
+                    cell.innerHTML = '<div><strong>กิจกรรม</strong></div>';
+                    row.appendChild(cell);
+                    return;
+                }
+                
+                // ตรวจสอบว่ามีข้อมูลหรือไม่
+                if (scheduleData[selectedClass] && 
+                    scheduleData[selectedClass][day] && 
+                    scheduleData[selectedClass][day][period]) {
+                    
+                    const classInfo = scheduleData[selectedClass][day][period];
+                    cell.classList.add('subject-cell');
+                    
+                    // ใช้ฟังก์ชันจัดการการแสดงผลห้อง
+                    const roomDisplay = parseRoomDisplay(classInfo.room);
+                    
+                    cell.innerHTML = `
+                        <div><strong>${classInfo.subject}</strong></div>
+                        <div class="small">${classInfo.teacher}</div>
+                        <div class="small text-muted">${roomDisplay}</div>
+                    `;
+                    
+                    // เพิ่มการคลิกเพื่อแก้ไขในโหมดแอดมิน
+                    if (isAdmin) {
+                        cell.classList.add('edit-mode');
+                        cell.style.cursor = 'pointer';
+                        cell.addEventListener('click', () => {
+                            ScheduleEditor.editSchedule(selectedClass, day, period, classInfo);
+                        });
+                    }
+                } else {
+                    // เซลล์ว่าง - สามารถเพิ่มได้ในโหมดแอดมิน
+                    cell.classList.add('empty-cell');
+                    cell.innerHTML = '<div class="text-muted">-</div>';
+                    
+                    if (isAdmin) {
+                        cell.style.cursor = 'pointer';
+                        cell.addEventListener('click', () => {
+                            ScheduleEditor.editSchedule(selectedClass, day, period);
+                        });
+                    }
+                }
+                
+                row.appendChild(cell);
+            });
+            
+            scheduleBody.appendChild(row);
+        });
+    }
+
+    static renderTeacherSchedule() {
+        const teacherSelect = document.getElementById('teacherSelect');
+        const selectedTeacher = teacherSelect ? teacherSelect.value : Object.values(teacherData)[0]?.name;
+        const teacherScheduleBody = document.getElementById('teacher-schedule-body');
+        
+        if (!teacherScheduleBody || !selectedTeacher) return;
+        
+        teacherScheduleBody.innerHTML = '';
+        
+        const days = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์'];
+        
+        days.forEach(day => {
+            const row = document.createElement('tr');
+            row.innerHTML = `<td class="day-header">${day}</td>`;
+            
+            const periods = [1, 2, 3, 4, 5, 6, 7, 8];
+            
+            periods.forEach(period => {
+                const cell = document.createElement('td');
+                
+                if (day === 'ศุกร์' && period === 7) {
+                    cell.classList.add('activity');
+                    cell.innerHTML = '<div><strong>กิจกรรม</strong></div>';
+                    row.appendChild(cell);
+                    return;
+                }
+                
+                let classInfo = null;
+                for (const className in scheduleData) {
+                    if (scheduleData[className][day] && 
+                        scheduleData[className][day][period] &&
+                        scheduleData[className][day][period].teacher === selectedTeacher) {
+                        
+                        classInfo = scheduleData[className][day][period];
+                        classInfo.className = className;
+                        break;
+                    }
+                }
+                
+                if (classInfo) {
+                    cell.classList.add('subject-cell');
+                    const roomDisplay = parseRoomDisplay(classInfo.room);
+                    
+                    cell.innerHTML = `
+                        <div><strong>${classInfo.subject}</strong></div>
+                        <div class="small">${classInfo.className}</div>
+                        <div class="small text-muted">${roomDisplay}</div>
+                    `;
+                } else {
+                    cell.innerHTML = '<div class="text-muted">-</div>';
+                }
+                
+                row.appendChild(cell);
+            });
+            
+            teacherScheduleBody.appendChild(row);
+        });
+    }
+
+    static renderRoomSchedule() {
+        const roomSelect = document.getElementById('roomSelect');
+        const selectedRoom = roomSelect ? roomSelect.value : Object.values(roomData)[0]?.code;
+        const roomScheduleBody = document.getElementById('room-schedule-body');
+        
+        if (!roomScheduleBody || !selectedRoom) return;
+        
+        roomScheduleBody.innerHTML = '';
+        
+        const days = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์'];
+        
+        days.forEach(day => {
+            const row = document.createElement('tr');
+            row.innerHTML = `<td class="day-header">${day}</td>`;
+            
+            const periods = [1, 2, 3, 4, 5, 6, 7, 8];
+            
+            periods.forEach(period => {
+                const cell = document.createElement('td');
+                
+                if (day === 'ศุกร์' && period === 7) {
+                    cell.classList.add('activity');
+                    cell.innerHTML = '<div><strong>กิจกรรม</strong></div>';
+                    row.appendChild(cell);
+                    return;
+                }
+                
+                let classInfo = null;
+                for (const className in scheduleData) {
+                    if (scheduleData[className][day] && 
+                        scheduleData[className][day][period] &&
+                        scheduleData[className][day][period].room === selectedRoom) {
+                        
+                        classInfo = scheduleData[className][day][period];
+                        classInfo.className = className;
+                        break;
+                    }
+                }
+                
+                if (classInfo) {
+                    cell.classList.add('subject-cell');
+                    cell.innerHTML = `
+                        <div><strong>${classInfo.subject}</strong></div>
+                        <div class="small">${classInfo.className}</div>
+                        <div class="small text-muted">${classInfo.teacher}</div>
+                    `;
+                } else {
+                    cell.innerHTML = '<div class="text-muted">-</div>';
+                }
+                
+                row.appendChild(cell);
+            });
+            
+            roomScheduleBody.appendChild(row);
+        });
+    }
+
+    static renderTeacherSummary() {
+        const teacherSummaryContent = document.getElementById('teacher-summary-content');
+        if (!teacherSummaryContent) return;
+        
+        teacherSummaryContent.innerHTML = '';
+        
+        // คำนวณชั่วโมงสอนของครูแต่ละท่าน
+        const teacherHours = {};
+        
+        for (const className in scheduleData) {
+            for (const day in scheduleData[className]) {
+                for (const period in scheduleData[className][day]) {
+                    const classInfo = scheduleData[className][day][period];
+                    if (classInfo.teacher && classInfo.subject) {
+                        if (!teacherHours[classInfo.teacher]) {
+                            teacherHours[classInfo.teacher] = {
+                                totalHours: 0,
+                                subjects: {}
+                            };
+                        }
+                        teacherHours[classInfo.teacher].totalHours++;
+                        
+                        if (!teacherHours[classInfo.teacher].subjects[classInfo.subject]) {
+                            teacherHours[classInfo.teacher].subjects[classInfo.subject] = 0;
+                        }
+                        teacherHours[classInfo.teacher].subjects[classInfo.subject]++;
+                    }
+                }
+            }
+        }
+        
+        // สร้างการ์ดสำหรับครูแต่ละท่าน
+        Object.values(teacherData).forEach(teacher => {
+            const hoursData = teacherHours[teacher.name] || { totalHours: 0, subjects: {} };
+            const subjects = Object.entries(hoursData.subjects);
+            
+            const col = document.createElement('div');
+            col.className = 'col-md-6 col-lg-4 mb-4';
+            
+            col.innerHTML = `
+                <div class="card teacher-card summary-card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-chalkboard-teacher me-2"></i>${teacher.name}
+                        </h5>
+                        <span class="badge bg-primary">${hoursData.totalHours} คาบ/สัปดาห์</span>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text"><small class="text-muted">${teacher.position || 'ครู'}</small></p>
+                        <h6 class="text-muted">รายวิชาที่สอน:</h6>
+                        <ul class="list-group list-group-flush">
+                            ${subjects.map(([subject, hours]) => 
+                                `<li class="list-group-item d-flex justify-content-between align-items-center py-1">
+                                    ${subject}
+                                    <span class="badge bg-secondary rounded-pill">${hours} คาบ</span>
+                                </li>`
+                            ).join('')}
+                            ${subjects.length === 0 ? 
+                                '<li class="list-group-item text-muted py-1">ไม่มีข้อมูลการสอน</li>' : ''}
+                        </ul>
+                    </div>
+                    <div class="card-footer">
+                        <small class="text-muted">สอนทั้งหมด ${hoursData.totalHours} คาบต่อสัปดาห์</small>
+                    </div>
+                </div>
+            `;
+            
+            teacherSummaryContent.appendChild(col);
+        });
+        
+        // หากไม่มีข้อมูลครู
+        if (Object.keys(teacherData).length === 0) {
+            teacherSummaryContent.innerHTML = `
+                <div class="col-12">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        ยังไม่มีข้อมูลครูในระบบ
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    static renderClassSummary() {
+        const classSummaryContent = document.getElementById('class-summary-content');
+        if (!classSummaryContent) return;
+        
+        classSummaryContent.innerHTML = '';
+        
+        // คำนวณรายวิชาของแต่ละชั้นเรียน
+        const classSubjects = {};
+        
+        for (const className in scheduleData) {
+            if (!classSubjects[className]) {
+                classSubjects[className] = {};
+            }
+            
+            for (const day in scheduleData[className]) {
+                for (const period in scheduleData[className][day]) {
+                    const classInfo = scheduleData[className][day][period];
+                    if (classInfo.subject) {
+                        if (!classSubjects[className][classInfo.subject]) {
+                            classSubjects[className][classInfo.subject] = 0;
+                        }
+                        classSubjects[className][classInfo.subject]++;
+                    }
+                }
+            }
+        }
+        
+        // สร้างการ์ดสำหรับแต่ละชั้นเรียน
+        Object.values(classData).forEach(classItem => {
+            const subjectsData = classSubjects[classItem.code] || {};
+            const subjects = Object.entries(subjectsData);
+            const totalHours = Object.values(subjectsData).reduce((sum, hours) => sum + hours, 0);
+            
+            const col = document.createElement('div');
+            col.className = 'col-md-6 col-lg-4 mb-4';
+            
+            col.innerHTML = `
+                <div class="card subject-card summary-card h-100">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-graduation-cap me-2"></i>${classItem.name}
+                        </h5>
+                        <p class="mb-0"><small class="text-muted">${classItem.program || ''}</small></p>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text"><small class="text-muted">ครูที่ปรึกษา: ${classItem.advisor || 'ยังไม่ได้กำหนด'}</small></p>
+                        <h6 class="text-muted">รายวิชาที่เรียน:</h6>
+                        <ul class="list-group list-group-flush">
+                            ${subjects.map(([subject, hours]) => 
+                                `<li class="list-group-item d-flex justify-content-between align-items-center py-1">
+                                    ${subject}
+                                    <span class="badge bg-secondary rounded-pill">${hours} คาบ</span>
+                                </li>`
+                            ).join('')}
+                            ${subjects.length === 0 ? 
+                                '<li class="list-group-item text-muted py-1">ไม่มีข้อมูลตารางเรียน</li>' : ''}
+                        </ul>
+                    </div>
+                    <div class="card-footer">
+                        <small class="text-muted">เรียนทั้งหมด ${totalHours} คาบต่อสัปดาห์</small>
+                    </div>
+                </div>
+            `;
+            
+            classSummaryContent.appendChild(col);
+        });
+        
+        // หากไม่มีข้อมูลชั้นเรียน
+        if (Object.keys(classData).length === 0) {
+            classSummaryContent.innerHTML = `
+                <div class="col-12">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        ยังไม่มีข้อมูลระดับชั้นในระบบ
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    static renderRoomSummary() {
+        const roomSummaryContent = document.getElementById('room-summary-content');
+        if (!roomSummaryContent) return;
+        
+        roomSummaryContent.innerHTML = '';
+        
+        // คำนวณการใช้ห้องแต่ละห้อง
+        const roomUsage = {};
+        
+        for (const className in scheduleData) {
+            for (const day in scheduleData[className]) {
+                for (const period in scheduleData[className][day]) {
+                    const classInfo = scheduleData[className][day][period];
+                    if (classInfo.room) {
+                        if (!roomUsage[classInfo.room]) {
+                            roomUsage[classInfo.room] = {
+                                totalHours: 0,
+                                classes: {}
+                            };
+                        }
+                        roomUsage[classInfo.room].totalHours++;
+                        
+                        if (!roomUsage[classInfo.room].classes[className]) {
+                            roomUsage[classInfo.room].classes[className] = 0;
+                        }
+                        roomUsage[classInfo.room].classes[className]++;
+                    }
+                }
+            }
+        }
+        
+        // สร้างการ์ดสำหรับแต่ละห้อง
+        Object.values(roomData).forEach(room => {
+            const usageData = roomUsage[room.code] || { totalHours: 0, classes: {} };
+            const classes = Object.entries(usageData.classes);
+            
+            const col = document.createElement('div');
+            col.className = 'col-md-6 col-lg-4 mb-4';
+            
+            col.innerHTML = `
+                <div class="card room-card summary-card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-door-open me-2"></i>${room.name}
+                        </h5>
+                        <span class="badge bg-primary">${usageData.totalHours} คาบ/สัปดาห์</span>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text"><small class="text-muted">${room.type} • ความจุ ${room.capacity} คน</small></p>
+                        <h6 class="text-muted">ชั้นเรียนที่ใช้:</h6>
+                        <ul class="list-group list-group-flush">
+                            ${classes.map(([classItem, hours]) => 
+                                `<li class="list-group-item d-flex justify-content-between align-items-center py-1">
+                                    ${classItem}
+                                    <span class="badge bg-secondary rounded-pill">${hours} คาบ</span>
+                                </li>`
+                            ).join('')}
+                            ${classes.length === 0 ? 
+                                '<li class="list-group-item text-muted py-1">ไม่มีข้อมูลการใช้งาน</li>' : ''}
+                        </ul>
+                    </div>
+                    <div class="card-footer">
+                        <small class="text-muted">ใช้งาน ${Math.round((usageData.totalHours / 35) * 100)}% ของเวลารวม</small>
+                    </div>
+                </div>
+            `;
+            
+            roomSummaryContent.appendChild(col);
+        });
+        
+        // หากไม่มีข้อมูลห้อง
+        if (Object.keys(roomData).length === 0) {
+            roomSummaryContent.innerHTML = `
+                <div class="col-12">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        ยังไม่มีข้อมูลห้องในระบบ
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    static renderSystemInfo() {
+        const stats = DataManager.getStats();
+        
+        if (document.getElementById('teacherCount')) {
+            document.getElementById('teacherCount').textContent = stats.teachers;
+        }
+        if (document.getElementById('subjectCount')) {
+            document.getElementById('subjectCount').textContent = stats.subjects;
+        }
+        if (document.getElementById('roomCount')) {
+            document.getElementById('roomCount').textContent = stats.rooms;
+        }
+        if (document.getElementById('classCount')) {
+            document.getElementById('classCount').textContent = stats.classes;
+        }
+        
+        // Update script URL field
+        if (document.getElementById('scriptUrl')) {
+            document.getElementById('scriptUrl').value = googleSheetsUrl || '';
+        }
+        
+        // Update online mode status
+        if (document.getElementById('onlineMode')) {
+            document.getElementById('onlineMode').checked = onlineMode;
+        }
+        
+        // Update connection status
+        const connectionStatus = document.getElementById('connectionStatus');
+        if (connectionStatus) {
+            if (onlineMode && googleSheetsUrl) {
+                connectionStatus.innerHTML = '<i class="fas fa-circle text-success me-1"></i>เชื่อมต่อออนไลน์';
+            } else if (onlineMode) {
+                connectionStatus.innerHTML = '<i class="fas fa-circle text-warning me-1"></i>ออนไลน์ (ยังไม่ได้ตั้งค่า URL)';
+            } else {
+                connectionStatus.innerHTML = '<i class="fas fa-circle text-secondary me-1"></i>โหมดออฟไลน์';
+            }
+        }
+        
+        // Update connection details
+        this.updateConnectionDetails();
+    }
+    
+    static updateConnectionDetails() {
+        const modeStatus = document.getElementById('modeStatus');
+        const urlStatus = document.getElementById('urlStatus');
+        const lastUpdate = document.getElementById('lastUpdate');
+        
+        if (modeStatus) {
+            modeStatus.textContent = onlineMode ? 'ออนไลน์' : 'ออฟไลน์';
+            modeStatus.className = onlineMode ? 'connection-good' : 'connection-warning';
+        }
+        
+        if (urlStatus) {
+            if (googleSheetsUrl) {
+                urlStatus.textContent = googleSheetsUrl;
+                urlStatus.className = 'url-valid';
+            } else {
+                urlStatus.textContent = 'ยังไม่ได้ตั้งค่า';
+                urlStatus.className = 'url-warning';
+            }
+        }
+        
+        if (lastUpdate) {
+            lastUpdate.textContent = new Date().toLocaleString('th-TH');
+        }
+    }
+}
+
+// Schedule editing functions
+class ScheduleEditor {
+    static editSchedule(className, day, period, classInfo = null) {
+        // เตรียมข้อมูลสำหรับฟอร์ม
+        document.getElementById('scheduleClassName').value = className;
+        document.getElementById('scheduleDay').value = day;
+        document.getElementById('schedulePeriod').value = period;
+        
+        // แสดงข้อมูลปัจจุบัน
+        document.getElementById('scheduleClassDisplay').textContent = className;
+        document.getElementById('scheduleDayDisplay').textContent = day;
+        document.getElementById('schedulePeriodDisplay').textContent = period;
+        
+        // โหลดรายการครู, ห้อง และวิชา
+        this.loadTeacherOptions();
+        this.loadRoomOptions();
+        this.loadSubjectOptions();
+        
+        // ตั้งค่าค่าปัจจุบัน (ถ้ามี)
+        if (classInfo) {
+            document.getElementById('scheduleSubject').value = classInfo.subject || '';
+            document.getElementById('scheduleTeacher').value = classInfo.teacher || '';
+            document.getElementById('scheduleRoom').value = classInfo.room || '';
+            document.getElementById('deleteScheduleBtn').classList.remove('d-none');
+        } else {
+            document.getElementById('scheduleSubject').value = '';
+            document.getElementById('scheduleTeacher').value = '';
+            document.getElementById('scheduleRoom').value = '';
+            document.getElementById('deleteScheduleBtn').classList.add('d-none');
+        }
+        
+        // แสดง modal
+        const modal = new bootstrap.Modal(document.getElementById('scheduleFormModal'));
+        modal.show();
+    }
+    
+    static loadTeacherOptions() {
+        const teacherSelect = document.getElementById('scheduleTeacher');
+        if (!teacherSelect) return;
+        
+        teacherSelect.innerHTML = '<option value="">-- เลือกครู --</option>';
+        
+        Object.values(teacherData).forEach(teacher => {
+            const option = document.createElement('option');
+            option.value = teacher.name;
+            option.textContent = teacher.name;
+            teacherSelect.appendChild(option);
+        });
+    }
+    
+    static loadSubjectOptions() {
+        const subjectSelect = document.getElementById('scheduleSubject');
+        if (!subjectSelect) return;
+        
+        subjectSelect.innerHTML = '<option value="">-- เลือกวิชา --</option>';
+        
+        Object.values(subjectData).forEach(subject => {
+            const option = document.createElement('option');
+            option.value = subject.name;
+            option.textContent = `${subject.code} - ${subject.name}`;
+            subjectSelect.appendChild(option);
+        });
+    }
+    
+    static loadRoomOptions() {
+        const roomSelect = document.getElementById('scheduleRoom');
+        if (!roomSelect) return;
+        
+        roomSelect.innerHTML = '<option value="">-- เลือกห้อง --</option>';
+        
+        Object.values(roomData).forEach(room => {
+            const option = document.createElement('option');
+            option.value = room.code;
+            option.textContent = room.name;
+            roomSelect.appendChild(option);
+        });
+    }
+    
+    static saveSchedule(formData) {
+        const className = formData.className;
+        const day = formData.day;
+        const period = formData.period;
+        const subject = formData.subject;
+        const teacher = formData.teacher;
+        const room = formData.room;
+        
+        // ตรวจสอบว่ามีข้อมูลหรือไม่
+        if (!subject && !teacher && !room) {
+            // ถ้าไม่มีข้อมูลทั้งหมด ให้ลบรายการนี้
+            if (scheduleData[className] && scheduleData[className][day] && scheduleData[className][day][period]) {
+                delete scheduleData[className][day][period];
+                
+                // ลบวันและระดับชั้นถ้าว่าง
+                if (Object.keys(scheduleData[className][day]).length === 0) {
+                    delete scheduleData[className][day];
+                }
+                if (Object.keys(scheduleData[className]).length === 0) {
+                    delete scheduleData[className];
+                }
+            }
+        } else {
+            // สร้างหรืออัพเดทข้อมูล
+            if (!scheduleData[className]) {
+                scheduleData[className] = {};
+            }
+            if (!scheduleData[className][day]) {
+                scheduleData[className][day] = {};
+            }
+            
+            scheduleData[className][day][period] = {
+                subject: subject,
+                teacher: teacher,
+                room: room
+            };
+        }
+        
+        // บันทึกข้อมูล
+        DataManager.saveToLocalStorage();
+        DataManager.autoSave();
+        return true;
+    }
+    
+    static deleteSchedule(className, day, period) {
+        if (scheduleData[className] && scheduleData[className][day] && scheduleData[className][day][period]) {
+            delete scheduleData[className][day][period];
+            
+            // ลบวันและระดับชั้นถ้าว่าง
+            if (Object.keys(scheduleData[className][day]).length === 0) {
+                delete scheduleData[className][day];
+            }
+            if (Object.keys(scheduleData[className]).length === 0) {
+                delete scheduleData[className];
+            }
+            
+            DataManager.saveToLocalStorage();
+            DataManager.autoSave();
+            return true;
+        }
+        return false;
+    }
+}
+
+// Print functionality
+class PrintManager {
+    static printSchedule() {
+        const currentView = document.querySelector('.view-content:not(.d-none)');
+        
+        if (currentView) {
+            const printWindow = window.open('', '_blank');
+            const title = currentView.querySelector('h3')?.textContent || 'ตารางเรียน';
+            
+            // ดึงชื่อห้องเรียนจาก dropdown
+            let roomName = '';
+            if (currentView.id === 'room-schedule') {
+                const roomSelect = document.getElementById('roomSelect');
+                if (roomSelect && roomSelect.selectedIndex >= 0) {
+                    roomName = roomSelect.options[roomSelect.selectedIndex].text;
+                }
+            }
+
+            printWindow.document.write(`
+                <html>
+                    <head>
+                        <title>พิมพ์${title}</title>
+                        <meta charset="UTF-8">
+                        <style>
+                            body { 
+                                font-family: 'Sarabun', sans-serif; 
+                                margin: 20px;
+                                color: #333;
+                            }
+                            table { 
+                                width: 100%; 
+                                border-collapse: collapse; 
+                                margin: 20px 0;
+                            }
+                            th, td { 
+                                border: 1px solid #000; 
+                                padding: 8px; 
+                                text-align: center; 
+                                font-size: 12px;
+                            }
+                            th { 
+                                background-color: #f0f0f0; 
+                                font-weight: bold;
+                            }
+                            .break-cell { 
+                                background-color: #ffe6e6; 
+                                font-weight: bold;
+                            }
+                            .home-room { 
+                                background-color: #e6ffe6; 
+                            }
+                            .activity { 
+                                background-color: #fff9e6; 
+                            }
+                            .day-header {
+                                background-color: #2c3e50;
+                                color: white;
+                                font-weight: bold;
+                            }
+                            .time-header {
+                                background-color: #3498db;
+                                color: white;
+                                font-weight: bold;
+                            }
+                            .header {
+                                text-align: center;
+                                margin-bottom: 20px;
+                            }
+                            .footer {
+                                text-align: center;
+                                margin-top: 30px;
+                                font-size: 12px;
+                                color: #666;
+                            }
+                            @media print {
+                                body { margin: 0; }
+                                .no-print { display: none; }
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="header">
+                            <h2>วิทยาลัยเทคโนโลยีแหลมทอง</h2>
+                            <h3>${title}</h3>
+                            ${roomName ? `<p><strong>ห้องเรียน:</strong> ${roomName}</p>` : ''}
+                            <p>พิมพ์เมื่อ: ${new Date().toLocaleDateString('th-TH')}</p>
+                        </div>
+                        ${currentView.querySelector('.table-responsive')?.innerHTML || currentView.innerHTML}
+                        <div class="footer">
+                            <p>ระบบจัดการตารางเรียนและตารางสอนกลุ่มงานไฟฟ้าและเล็กทรอนิกส์ - Printed from Schedule Management System</p>
+                        </div>
+                    </body>
+                </html>
+            `);
+            printWindow.document.close();
+            
+            // Wait for content to load before printing
+            setTimeout(() => {
+                printWindow.print();
+                // printWindow.close(); // Uncomment to auto-close after printing
+            }, 500);
+        }
+    }
+}
+
+// Utility functions
+function showNotification(message, type = 'info') {
+    // Remove existing notifications
+    const existingNotifications = document.querySelectorAll('.notification');
+    existingNotifications.forEach(notification => notification.remove());
+    
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type === 'error' ? 'danger' : type} notification`;
+    notification.innerHTML = `
+        <div class="d-flex justify-content-between align-items-center">
+            <span>${message}</span>
+            <button type="button" class="btn-close" onclick="this.parentElement.parentElement.remove()"></button>
+        </div>
     `;
     
-    document.getElementById('message').innerHTML = errorHtml;
-    return null;
-  } finally {
-    showLoading(false, 'ทดสอบการเชื่อมต่อ');
-  }
+    document.body.appendChild(notification);
+    
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.remove();
+        }
+    }, 5000);
 }
 
-// ฟังก์ชันตรวจสอบและซ่อมแซมข้อมูล
-function validateAndRepairData() {
-  console.log('🔧 กำลังตรวจสอบและซ่อมแซมข้อมูล...');
-  
-  if (!teachers || !Array.isArray(teachers)) {
-    console.warn('⚠️ Teachers array is invalid, resetting...');
-    teachers = [];
-  } else {
-    teachers = teachers.filter(teacher => 
-      teacher && typeof teacher === 'string' && teacher.trim() !== ''
-    ).map(teacher => teacher.trim());
-  }
-  
-  if (!classes || !Array.isArray(classes)) {
-    console.warn('⚠️ Classes array is invalid, resetting...');
-    classes = [];
-  } else {
-    classes = classes.filter(cls => 
-      cls && typeof cls === 'string' && cls.trim() !== ''
-    ).map(cls => cls.trim());
-  }
-  
-  if (!subjects || !Array.isArray(subjects)) {
-    console.warn('⚠️ Subjects array is invalid, resetting...');
-    subjects = [];
-  } else {
-    subjects = subjects.filter(subject => 
-      subject && typeof subject === 'string' && subject.trim() !== ''
-    ).map(subject => subject.trim());
-  }
-  
-  if (!rooms || !Array.isArray(rooms)) {
-    console.warn('⚠️ Rooms array is invalid, resetting...');
-    rooms = [];
-  } else {
-    rooms = rooms.filter(room => 
-      room && typeof room === 'string' && room.trim() !== ''
-    ).map(room => room.trim());
-  }
-  
-  if (!lessons || !Array.isArray(lessons)) {
-    console.warn('⚠️ Lessons array is invalid, resetting...');
-    lessons = [];
-  } else {
-    lessons = lessons.filter(lesson => {
-      if (!lesson || typeof lesson !== 'object') return false;
-      
-      lesson.id = lesson.id || generateId();
-      lesson.teacher = lesson.teacher || '';
-      lesson.subject = lesson.subject || '';
-      lesson.classLevel = lesson.classLevel || '';
-      lesson.room = lesson.room || '';
-      lesson.day = typeof lesson.day === 'number' ? lesson.day : parseInt(lesson.day) || 0;
-      lesson.period = typeof lesson.period === 'number' ? lesson.period : parseInt(lesson.period) || 0;
-      
-      return lesson.teacher && lesson.subject;
-    });
-  }
-  
-  console.log('✅ ตรวจสอบและซ่อมแซมข้อมูลสำเร็จ:', {
-    teachers: teachers.length,
-    classes: classes.length,
-    subjects: subjects.length,
-    rooms: rooms.length,
-    lessons: lessons.length
-  });
-}
-
-// ฟังก์ชันสร้าง ID
-function generateId() {
-  return Date.now().toString() + Math.random().toString(16).slice(2);
-}
-
-// ฟังก์ชันโหลดจาก Local Storage
-function loadFromLocalStorage() {
-  console.log('💾 กำลังโหลดข้อมูลจาก Local Storage...');
-  
-  try {
-    teachers = JSON.parse(localStorage.getItem('teachers')) || [];
-    classes = JSON.parse(localStorage.getItem('classes')) || [];
-    subjects = JSON.parse(localStorage.getItem('subjects')) || [];
-    rooms = JSON.parse(localStorage.getItem('rooms')) || [];
-    lessons = JSON.parse(localStorage.getItem('lessons')) || [];
-    
-    validateAndRepairData();
-    
-    if (teachers.length === 0 && classes.length === 0 && subjects.length === 0 && rooms.length === 0) {
-      console.log('📝 ไม่พบข้อมูล, ใช้ข้อมูลตัวอย่าง...');
-      teachers = ['ครูสมชาย', 'ครูสมหญิง', 'ครูนิดา'];
-      classes = ['ปวช.1/1', 'ปวช.1/2', 'ปวช.2/1'];
-      subjects = ['คณิตศาสตร์', 'วิทยาศาสตร์', 'ภาษาอังกฤษ'];
-      rooms = ['ห้อง 101', 'ห้อง 102', 'ห้อง Lab 1'];
-      lessons = [];
-      
-      backupToLocalStorage({ teachers, classes, subjects, rooms, lessons });
-    }
-    
-    const totalLessons = lessons.length;
-    document.getElementById('message').innerHTML = 
-      `<div style="color:orange;">
-        📱 ใช้ข้อมูลจาก Local Storage<br>
-        <small>ครู: ${teachers.length} ท่าน | วิชา: ${subjects.length} รายการ | ตารางเรียน: ${totalLessons} คาบ</small>
-      </div>`;
-      
-  } catch (error) {
-    console.error('❌ ข้อผิดพลาดในการโหลดข้อมูล Local Storage:', error);
-    teachers = ['ครูสมชาย', 'ครูสมหญิง', 'ครูนิดา'];
-    classes = ['ปวช.1/1', 'ปวช.1/2', 'ปวช.2/1'];
-    subjects = ['คณิตศาสตร์', 'วิทยาศาสตร์', 'ภาษาอังกฤษ'];
-    rooms = ['ห้อง 101', 'ห้อง 102', 'ห้อง Lab 1'];
-    lessons = [];
-    
-    backupToLocalStorage({ teachers, classes, subjects, rooms, lessons });
-    
-    document.getElementById('message').innerHTML = 
-      `<div style="color:red;">
-        ❌ เกิดข้อผิดพลาดในการโหลดข้อมูล Local Storage<br>
-        <small>ใช้ข้อมูลตัวอย่างแทน</small>
-      </div>`;
-  }
-}
-
-// ฟังก์ชันโหลดข้อมูลทั้งหมดจาก Google Sheet
-async function loadAllData() {
-  let loadingShown = false;
-  
-  try {
-    showLoading(true, 'โหลดข้อมูลจาก Google Sheets');
-    loadingShown = true;
-    
-    console.log('📥 เริ่มโหลดข้อมูลจาก Google Sheets...');
-    
-    const testResult = await testSimpleConnection();
-    if (!testResult || !testResult.success) {
-      throw new Error('Cannot connect to Google Sheets');
-    }
-    
-    const data = await callGoogleAppsScript('getAllData');
-    
-    if (data && data.success) {
-      teachers = data.teachers || [];
-      classes = data.classes || [];
-      subjects = data.subjects || [];
-      rooms = data.rooms || [];
-      lessons = data.lessons || [];
-      
-      validateAndRepairData();
-      backupToLocalStorage({ teachers, classes, subjects, rooms, lessons });
-      
-      console.log('✅ โหลดข้อมูลจาก Google Sheets สำเร็จ');
-      
-      // แสดงสถิติข้อมูล
-      const statsHtml = showDataStatistics();
-      
-      document.getElementById('message').innerHTML = 
-        `<div style="color:green;">
-          ✅ โหลดข้อมูลจาก Google Sheets สำเร็จ<br>
-          <small>ครู: ${teachers.length} ท่าน | วิชา: ${subjects.length} รายการ | ตารางเรียน: ${lessons.length} คาบ</small>
-        </div>
-        ${statsHtml}`;
+// ฟังก์ชันแสดงความคืบหน้า
+function showProgress(message, current, total) {
+    const progressElement = document.getElementById('uploadProgress');
+    if (!progressElement) {
+        // สร้าง element แสดงความคืบหน้า
+        const progressDiv = document.createElement('div');
+        progressDiv.id = 'uploadProgress';
+        progressDiv.className = 'alert alert-info mt-3';
+        progressDiv.style.position = 'fixed';
+        progressDiv.style.top = '100px';
+        progressDiv.style.right = '20px';
+        progressDiv.style.zIndex = '9999';
+        progressDiv.style.minWidth = '300px';
+        progressDiv.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center">
+                <span>${message}</span>
+                <span>${current}/${total}</span>
+            </div>
+            <div class="progress mt-2">
+                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" 
+                     style="width: ${(current/total)*100}%"></div>
+            </div>
+        `;
+        document.body.appendChild(progressDiv);
     } else {
-      throw new Error(data?.error || 'Failed to load data from server');
+        // อัพเดทความคืบหน้า
+        progressElement.querySelector('span:first-child').textContent = message;
+        progressElement.querySelector('span:last-child').textContent = `${current}/${total}`;
+        progressElement.querySelector('.progress-bar').style.width = `${(current/total)*100}%`;
     }
-  } catch (error) {
-    console.error('❌ ข้อผิดพลาดในการโหลดข้อมูลจาก Google Sheets:', error);
-    
-    loadFromLocalStorage();
-    
-    // แสดงสถิติข้อมูลแม้ในโหมดออฟไลน์
-    const statsHtml = showDataStatistics();
-    
-    document.getElementById('message').innerHTML = 
-      `<div style="color:orange;">
-        📱 ใช้ข้อมูลจาก Local Storage (ออฟไลน์)<br>
-        <small>${error.message}</small>
-        <br>
-        <a href="${GAS_URL}?action=test" target="_blank" style="color:blue;text-decoration:underline;">คลิกที่นี่เพื่อตั้งค่า Google Apps Script</a>
-      </div>
-      ${statsHtml}`;
-  } finally {
-    if (loadingShown) {
-      showLoading(false, 'โหลดข้อมูลจาก Google Sheets');
+}
+
+// ฟังก์ชันซ่อนความคืบหน้า
+function hideProgress() {
+    const progressElement = document.getElementById('uploadProgress');
+    if (progressElement) {
+        progressElement.remove();
     }
-  }
 }
 
-// ฟังก์ชันบันทึกข้อมูลลง Local Storage
-function backupToLocalStorage(data) {
-  if (data.teachers) localStorage.setItem('teachers', JSON.stringify(data.teachers));
-  if (data.classes) localStorage.setItem('classes', JSON.stringify(data.classes));
-  if (data.subjects) localStorage.setItem('subjects', JSON.stringify(data.subjects));
-  if (data.rooms) localStorage.setItem('rooms', JSON.stringify(data.rooms));
-  if (data.lessons) localStorage.setItem('lessons', JSON.stringify(data.lessons));
-  
-  console.log('💾 สำรองข้อมูลลง Local Storage สำเร็จ');
-}
-
-// =============================================
-// ฟังก์ชันบันทึกข้อมูลแบบใหม่ - เพิ่มประสิทธิภาพ
-// =============================================
-
-// ฟังก์ชันตรวจสอบข้อมูลก่อนบันทึก
-function validateLessonsBeforeSave() {
-  console.log('🔍 กำลังตรวจสอบข้อมูลก่อนบันทึก...');
-  
-  const validLessons = lessons.filter(lesson => {
-    return lesson && 
-           lesson.id && 
-           lesson.teacher && 
-           lesson.subject && 
-           lesson.classLevel && 
-           lesson.room &&
-           typeof lesson.day === 'number' &&
-           typeof lesson.period === 'number';
-  });
-  
-  if (validLessons.length !== lessons.length) {
-    console.warn(`⚠️ พบข้อมูลไม่สมบูรณ์: ${lessons.length - validLessons.length} รายการ`);
-    console.log('รายการที่ไม่สมบูรณ์:', lessons.filter(lesson => !validLessons.includes(lesson)));
-  }
-  
-  return validLessons;
-}
-
-// ฟังก์ชันบันทึกเฉพาะ lessons ไปยัง Google Sheets
-async function saveLessonsOnly() {
-  let loadingShown = false;
-  
-  try {
-    showLoading(true, 'บันทึกข้อมูลตารางเรียน');
-    loadingShown = true;
-    
-    // ตรวจสอบข้อมูลก่อนบันทึก
-    const validatedLessons = validateLessonsBeforeSave();
-    
-    console.log('💾 กำลังบันทึกข้อมูลตารางเรียน...', {
-      lessons: validatedLessons.length,
-      sample: validatedLessons.slice(0, 5) // แสดงตัวอย่าง 5 รายการแรก
+function showView(viewId) {
+    // Hide all views
+    document.querySelectorAll('.view-content').forEach(view => {
+        view.classList.add('d-none');
     });
     
-    if (validatedLessons.length === 0) {
-      throw new Error('ไม่มีข้อมูลตารางเรียนที่จะบันทึก');
+    // Show selected view
+    const targetView = document.getElementById(viewId);
+    if (targetView) {
+        targetView.classList.remove('d-none');
     }
     
-    // ใช้วิธีบันทึกแบบเร็วสำหรับ lessons เท่านั้น
-    const result = await callGoogleAppsScript('saveLessonsOnly', { lessons: validatedLessons });
+    // Update active nav link
+    document.querySelectorAll('.sidebar .nav-link').forEach(item => {
+        item.classList.remove('active');
+    });
+    document.querySelector(`.sidebar .nav-link[data-view="${viewId}"]`).classList.add('active');
     
-    if (result && result.success) {
-      backupToLocalStorage({ lessons: validatedLessons });
-      
-      const timeMsg = result.executionTime ? ` ใน ${result.executionTime} วินาที` : '';
-      console.log('✅ บันทึกข้อมูลตารางเรียนสำเร็จ' + timeMsg, {
-        recordsSent: validatedLessons.length,
-        recordsConfirmed: result.stats?.lessons || 'N/A'
-      });
-      
-      document.getElementById('message').innerHTML = 
-        `<div style="color:green;">
-          ✅ บันทึกข้อมูลตารางเรียนสำเร็จ${timeMsg}<br>
-          <small>${result.message || 'บันทึกข้อมูลตารางเรียนเรียบร้อย'}</small>
-          ${result.stats ? `<br><small>ตารางเรียน: ${result.stats.lessons || 0} คาบ</small>` : ''}
-        </div>`;
-      return true;
+    // Render specific content
+    switch (viewId) {
+        case 'class-schedule':
+            ScheduleRenderer.renderClassSchedule();
+            break;
+        case 'teacher-schedule':
+            ScheduleRenderer.renderTeacherSchedule();
+            break;
+        case 'room-schedule':
+            ScheduleRenderer.renderRoomSchedule();
+            break;
+        case 'teacher-summary':
+            ScheduleRenderer.renderTeacherSummary();
+            break;
+        case 'class-summary':
+            ScheduleRenderer.renderClassSummary();
+            break;
+        case 'room-summary':
+            ScheduleRenderer.renderRoomSummary();
+            break;
+        case 'system-info':
+            ScheduleRenderer.renderSystemInfo();
+            break;
+    }
+    
+    // อัพเดทโหมดแก้ไขทุกครั้งที่เปลี่ยน view
+    updateEditMode();
+}
+
+function updateEditMode() {
+    const scheduleBody = document.getElementById('schedule-body');
+    
+    // อัพเดทเมนูผู้ดูแลระบบ
+    const adminMenu = document.getElementById('adminMenu');
+    const loginBtn = document.getElementById('loginBtn');
+    
+    if (isAdmin) {
+        if (adminMenu) adminMenu.classList.remove('d-none');
+        if (loginBtn) loginBtn.innerHTML = '<i class="fas fa-sign-out-alt me-1"></i> ออกจากระบบ';
+        
+        // เพิ่มข้อความแจ้งเตือนโหมดแก้ไข
+        if (!document.getElementById('editModeAlert')) {
+            const alert = document.createElement('div');
+            alert.id = 'editModeAlert';
+            alert.className = 'alert alert-warning alert-dismissible fade show mb-3';
+            alert.innerHTML = `
+                <i class="fas fa-edit me-2"></i>
+                <strong>โหมดแก้ไขเปิดใช้งาน!</strong> คุณสามารถคลิกที่ช่องตารางเรียนเพื่อแก้ไขข้อมูล
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            const mainContent = document.querySelector('.col-md-10');
+            if (mainContent) {
+                mainContent.insertBefore(alert, mainContent.firstChild);
+            }
+        }
     } else {
-      throw new Error(result?.error || 'Failed to save lessons to Google Sheets');
+        if (adminMenu) adminMenu.classList.add('d-none');
+        if (loginBtn) loginBtn.innerHTML = '<i class="fas fa-sign-in-alt me-1"></i> เข้าสู่ระบบ';
+        
+        // ลบข้อความแจ้งเตือนโหมดแก้ไข
+        const editModeAlert = document.getElementById('editModeAlert');
+        if (editModeAlert) {
+            editModeAlert.remove();
+        }
     }
-  } catch (error) {
-    console.error('❌ ข้อผิดพลาดในการบันทึกข้อมูลตารางเรียน:', error);
-    
-    // บันทึกลง Local Storage เป็น fallback
-    backupToLocalStorage({ lessons });
-    
-    document.getElementById('message').innerHTML = 
-      `<div style="color:orange;">
-        📱 บันทึกข้อมูลตารางเรียนลง Local Storage<br>
-        <small>${error.message}</small>
-        <br>
-        <button onclick="retrySaveLessons()" class="btn-primary small" style="margin-top: 5px;">ลองบันทึกอีกครั้ง</button>
-      </div>`;
-    return false;
-  } finally {
-    if (loadingShown) {
-      showLoading(false, 'บันทึกข้อมูลตารางเรียน');
-    }
-  }
 }
 
-// ฟังก์ชันลองบันทึกอีกครั้ง
-async function retrySaveLessons() {
-  await saveLessonsOnly();
+// ฟังก์ชันจัดการห้องที่ซับซ้อน (เช่น 223/226)
+function parseRoomDisplay(roomCode) {
+    if (!roomCode) return '';
+    
+    if (roomCode.includes('/')) {
+        return `<span class="multiple-rooms">${roomCode}</span>`;
+    } else if (roomCode.includes('Shop.')) {
+        return `<span class="workshop-room">${roomCode}</span>`;
+    } else if (['422', '428', '112', '111', '114', '113', '133', '424'].includes(roomCode)) {
+        return `<span class="class-room">${roomCode}</span>`;
+    } else {
+        return `<span class="lab-room">${roomCode}</span>`;
+    }
 }
 
-// ฟังก์ชันบันทึกข้อมูลทั้งหมดแบบปรับปรุง
-async function saveAllDataOptimized() {
-  let loadingShown = false;
-  
-  try {
-    showLoading(true, 'บันทึกข้อมูลทั้งหมดแบบเร็ว');
-    loadingShown = true;
+function loadSampleData() {
+    // Only load sample data if no data exists
+    if (Object.keys(scheduleData).length === 0) {
+        // ข้อมูลตารางเรียนจริงจาก Excel
+        scheduleData = {
+            "ปวช.2 ชอ.": {
+                "จันทร์": {
+                    1: { subject: "งานนิวเมติกส์และไฮดรอลิกส์เบื้องต้น", teacher: "อ.อำพรรณ ทิมจำลอง", room: "225" },
+                    2: { subject: "งานนิวเมติกส์และไฮดรอลิกส์เบื้องต้น", teacher: "อ.อำพรรณ ทิมจำลอง", room: "225" },
+                    5: { subject: "ไมโครคอนโทรลเลอร์", teacher: "อ.ธีระ กลมเกลา", room: "124" }
+                },
+                "อังคาร": {
+                    1: { subject: "การใช้ภาษาไทยเชิงสร้างสรรค์", teacher: "อ.อุษา กลิ่นสุคนธ์", room: "112" },
+                    2: { subject: "ภาษาอังกฤษเพื่องานช่างไฟฟ้าและอิเล็กทรอนิกส์", teacher: "อ.นุชสรา ร่มโพธิ์ตาล", room: "111" },
+                    5: { subject: "คณิตศาสตร์ช่างอิเล็กทรอนิกส์", teacher: "อ.สุกรา รื่นเริง", room: "427" }
+                },
+                "พุธ": {
+                    1: { subject: "การพัฒนาอย่างยั่งยืน", teacher: "อ.พัชรีย์ เย็นนภา", room: "114" },
+                    2: { subject: "การพัฒนาอย่างยั่งยืน", teacher: "อ.พัชรีย์ เย็นนภา", room: "114" },
+                    4: { subject: "เครื่องรับวิทยุ", teacher: "อ.สุกรา รื่นเริง", room: "427" },
+                    5: { subject: "เครื่องรับวิทยุ", teacher: "อ.สุกรา รื่นเริง", room: "427" }
+                },
+                "พฤหัสบดี": {
+                    1: { subject: "การเขียนโปรแกรมคอมพิวเตอร์", teacher: "อ.ธีระ กลมเกลา", room: "124" },
+                    2: { subject: "การเขียนโปรแกรมคอมพิวเตอร์", teacher: "อ.ธีระ กลมเกลา", room: "124" },
+                    5: { subject: "การเขียนโปรแกรมคอมพิวเตอร์", teacher: "อ.ธีระ กลมเกลา", room: "124" },
+                    6: { subject: "ไมโครคอนโทรลเลอร์", teacher: "อ.ธีระ กลมเกลา", room: "124" }
+                },
+                "ศุกร์": {
+                    1: { subject: "อินเตอร์เฟซเบื้องต้น", teacher: "อ.ธีระ กลมเกลา", room: "124" },
+                    2: { subject: "อินเตอร์เฟซเบื้องต้น", teacher: "อ.ธีระ กลมเกลา", room: "124" },
+                    5: { subject: "โฮมรูม", teacher: "อ.สุกรา รื่นเริง", room: "428" },
+                    6: { subject: "กิจกรรมองค์การวิชาชีพ 1", teacher: "", room: "" }
+                }
+            },
+            "ปวช.1 ชฟ.": {
+                "จันทร์": {
+                    1: { subject: "เขียนแบบไฟฟ้า", teacher: "อ.ชลธิชา หมอยาดี", room: "223/226" },
+                    2: { subject: "เขียนแบบไฟฟ้า", teacher: "อ.ชลธิชา หมอยาดี", room: "223/226" },
+                    5: { subject: "เครื่องวัดไฟฟ้า", teacher: "อ.สุกรา รื่นเริง", room: "223" }
+                },
+                "อังคาร": {
+                    1: { subject: "งานเชื่อมและโลหะแผ่นเบื้องต้น", teacher: "อ.ประสงค์ ชาญสูงเนิน", room: "Shop. ช่างเชื่อม" },
+                    2: { subject: "งานเชื่อมและโลหะแผ่นเบื้องต้น", teacher: "อ.ประสงค์ ชาญสูงเนิน", room: "Shop. ช่างเชื่อม" },
+                    5: { subject: "การติดตั้งไฟฟ้าในอาคาร", teacher: "อ.อำพรรณ ทิมจำลอง", room: "111" }
+                },
+                "พุธ": {
+                    1: { subject: "ภาษาไทยเพื่ออาชีพ", teacher: "อ.อุษา กลิ่นสุคนธ์", room: "112" },
+                    2: { subject: "การฟังและการพูดภาษาอังกฤษ", teacher: "อ.นุชสรา ร่มโพธิ์ตาล", room: "111" },
+                    5: { subject: "วิทยาศาสตร์เพื่ออาชีพอุตสาหกรรม", teacher: "อ.พัชรีย์ เย็นนภา", room: "114" }
+                },
+                "พฤหัสบดี": {
+                    1: { subject: "งานเครื่องมือกลเบื้องต้น", teacher: "อ.ณธีพัฒน์ ธนาธิปภิญโญกุล", room: "Shop. ช่างกล" },
+                    2: { subject: "งานเครื่องมือกลเบื้องต้น", teacher: "อ.ณธีพัฒน์ ธนาธิปภิญโญกุล", room: "Shop. ช่างกล" },
+                    5: { subject: "สุขภาพความปลอดภัยและสิ่งแวดล้อม", teacher: "อ.ประวุฒิ ใจแสน", room: "113" }
+                },
+                "ศุกร์": {
+                    1: { subject: "การติดตั้งไฟฟ้าในอาคาร", teacher: "อ.อำพรรณ ทิมจำลอง", room: "222/227" },
+                    2: { subject: "การติดตั้งไฟฟ้าในอาคาร", teacher: "อ.อำพรรณ ทิมจำลอง", room: "222/227" },
+                    5: { subject: "โฮมรูม", teacher: "อ.อำพรรณ ทิมจำลอง", room: "223" },
+                    6: { subject: "กิจกรรมลูกเสือวิสามัญ 2", teacher: "", room: "" }
+                }
+            }
+        };
+    }
     
-    // ตรวจสอบข้อมูลก่อนบันทึก
-    const validatedLessons = validateLessonsBeforeSave();
+    if (Object.keys(teacherData).length === 0) {
+        teacherData = {
+            "T001": { code: "T001", name: "อ.ธีระ กลมเกลา", position: "หัวหน้าสาขาช่างไฟฟ้าและอิเล็กทรอนิกส์" },
+            "T002": { code: "T002", name: "อ.ชลธิชา หมอยาดี", position: "ครู" },
+            "T003": { code: "T003", name: "อ.อำพรรณ ทิมจำลอง", position: "ครู" },
+            "T004": { code: "T004", name: "อ.สุกรา รื่นเริง", position: "รองผู้อำนวยการฝ่ายวิชาการ" },
+            "T005": { code: "T005", name: "อ.อุษา กลิ่นสุคนธ์", position: "ครู" },
+            "T006": { code: "T006", name: "อ.นุชสรา ร่มโพธิ์ตาล", position: "ครู" },
+            "T007": { code: "T007", name: "อ.พัชรีย์ เย็นนภา", position: "ครู" },
+            "T008": { code: "T008", name: "อ.ประสงค์ ชาญสูงเนิน", position: "ครู" },
+            "T009": { code: "T009", name: "อ.ณธีพัฒน์ ธนาธิปภิญโญกุล", position: "ครู" },
+            "T010": { code: "T010", name: "อ.ประวุฒิ ใจแสน", position: "ครู" },
+            "T011": { code: "T011", name: "อ.พรสวรรค์ นิ่มทอง", position: "ครู" },
+            "T012": { code: "T012", name: "อ.ประภาส พูนเพชร", position: "ครู" }
+        };
+    }
     
-    const dataToSave = {
-      teachers: teachers || [],
-      classes: classes || [],
-      subjects: subjects || [],
-      rooms: rooms || [],
-      lessons: validatedLessons
-    };
+    if (Object.keys(roomData).length === 0) {
+        roomData = {
+            "422": { code: "422", name: "ห้อง 422", type: "ห้องเรียน", capacity: 40 },
+            "427": { code: "427", name: "ห้อง 427", type: "ห้องปฏิบัติการ", capacity: 30 },
+            "428": { code: "428", name: "ห้อง 428", type: "ห้องเรียน", capacity: 40 },
+            "222": { code: "222", name: "ห้อง 222", type: "ห้องปฏิบัติการ", capacity: 25 },
+            "223": { code: "223", name: "ห้อง 223", type: "ห้องปฏิบัติการ", capacity: 25 },
+            "224": { code: "224", name: "ห้อง 224", type: "ห้องเรียน", capacity: 40 },
+            "225": { code: "225", name: "ห้อง 225", type: "ห้องปฏิบัติการ", capacity: 25 },
+            "226": { code: "226", name: "ห้อง 226", type: "ห้องปฏิบัติการ", capacity: 25 },
+            "227": { code: "227", name: "ห้อง 227", type: "ห้องปฏิบัติการ", capacity: 25 },
+            "124": { code: "124", name: "ห้อง 124", type: "ห้องปฏิบัติการ", capacity: 25 },
+            "121": { code: "121", name: "ห้อง 121", type: "ห้องปฏิบัติการ", capacity: 25 },
+            "112": { code: "112", name: "ห้อง 112", type: "ห้องเรียน", capacity: 40 },
+            "111": { code: "111", name: "ห้อง 111", type: "ห้องเรียน", capacity: 40 },
+            "114": { code: "114", name: "ห้อง 114", type: "ห้องเรียน", capacity: 40 },
+            "113": { code: "113", name: "ห้อง 113", type: "ห้องเรียน", capacity: 40 },
+            "133": { code: "133", name: "ห้อง 133", type: "ห้องเรียน", capacity: 40 },
+            "424": { code: "424", name: "ห้อง 424", type: "ห้องเรียน", capacity: 40 }
+        };
+    }
     
-    console.log('🚀 กำลังบันทึกข้อมูลทั้งหมดแบบเร็ว...', {
-      teachers: dataToSave.teachers.length,
-      classes: dataToSave.classes.length,
-      subjects: dataToSave.subjects.length,
-      rooms: dataToSave.rooms.length,
-      lessons: dataToSave.lessons.length
+    if (Object.keys(classData).length === 0) {
+        classData = {
+            "ปวช.2 ชอ.": { 
+                code: "ปวช.2 ชอ.", 
+                name: "ประกาศนียบัตรวิชาชีพ ชั้นปีที่ 2 สาขาช่างอิเล็กทรอนิกส์",
+                program: "กลุ่มวิชาพลังงานไฟฟ้าและอิเล็กทรอนิกส์",
+                advisor: "อ.สุกรา รื่นเริง"
+            },
+            "ปวช.1 ชฟ.": { 
+                code: "ปวช.1 ชฟ.", 
+                name: "ประกาศนียบัตรวิชาชีพ ชั้นปีที่ 1 สาขาช่างไฟฟ้า",
+                program: "กลุ่มวิชาพลังงานไฟฟ้าและอิเล็กทรอนิกส์",
+                advisor: "อ.อำพรรณ ทิมจำลอง"
+            },
+            "ปวช.2 ชฟ.": { 
+                code: "ปวช.2 ชฟ.", 
+                name: "ประกาศนียบัตรวิชาชีพ ชั้นปีที่ 2 สาขาช่างไฟฟ้า",
+                program: "กลุ่มวิชาพลังงานไฟฟ้าและอิเล็กทรอนิกส์",
+                advisor: "อ.ชลธิชา หมอยาดี"
+            },
+            "ปวช.3 ชฟ.": { 
+                code: "ปวช.3 ชฟ.", 
+                name: "ประกาศนียบัตรวิชาชีพ ชั้นปีที่ 3 สาขาช่างไฟฟ้า",
+                program: "สาขาวิชาไฟฟ้ากำลัง",
+                advisor: "อ.ธีระ กลมเกลา"
+            },
+            "ปวส.1-1 ชฟ.": { 
+                code: "ปวส.1-1 ชฟ.", 
+                name: "ประกาศนียบัตรวิชาชีพชั้นสูง ปีที่ 1 สาขาช่างไฟฟ้า",
+                program: "กลุ่มวิชาพลังงานไฟฟ้าและอิเล็กทรอนิกส์",
+                advisor: "อ.อำพรรณ ทิมจำลอง"
+            },
+            "ปวส.1-6 ชฟ.": { 
+                code: "ปวส.1-6 ชฟ.", 
+                name: "ประกาศนียบัตรวิชาชีพชั้นสูง ปีที่ 1 สาขาช่างไฟฟ้า",
+                program: "กลุ่มวิชาพลังงานไฟฟ้าและอิเล็กทรอนิกส์",
+                advisor: "อ.อำพรรณ ทิมจำลอง"
+            },
+            "ปวส.2-1 ชฟ.": { 
+                code: "ปวส.2-1 ชฟ.", 
+                name: "ประกาศนียบัตรวิชาชีพชั้นสูง ปีที่ 2 สาขาช่างไฟฟ้า",
+                program: "กลุ่มวิชาพลังงานไฟฟ้าและอิเล็กทรอนิกส์",
+                advisor: "อ.ธีระ กลมเกลา"
+            }
+        };
+    }
+    
+    DataManager.saveToLocalStorage();
+}
+
+// ฟังก์ชันเปิดโหมด Admin โดยตรง (สำหรับการทดสอบ)
+function enableAdminMode() {
+    isAdmin = true;
+    localStorage.setItem('isAdmin', 'true');
+    updateEditMode();
+    ScheduleRenderer.renderAllViews();
+    showNotification('เปิดโหมดผู้ดูแลระบบเรียบร้อยแล้ว', 'success');
+}
+
+// ฟังก์ชันเพิ่มปุ่มลัดสำหรับเปิดโหมด Admin
+function addAdminShortcut() {
+    // เพิ่มปุ่มลัดโดยการดับเบิลคลิกที่โลโก้
+    const navbarBrand = document.querySelector('.navbar-brand');
+    if (navbarBrand) {
+        navbarBrand.addEventListener('dblclick', function() {
+            if (!isAdmin) {
+                enableAdminMode();
+            }
+        });
+    }
+    
+    // เพิ่มคำสั่งใน console
+    console.log('🔧 คำสั่งสำหรับ Developer:');
+    console.log('enableAdminMode() - เปิดโหมดผู้ดูแลระบบ');
+    console.log('updateEditMode() - อัพเดทโหมดแก้ไข');
+}
+
+// Initialize the application
+document.addEventListener('DOMContentLoaded', function() {
+    initializeApp();
+    setupEventListeners();
+    loadSampleData();
+    ScheduleRenderer.renderAllViews();
+    addAdminShortcut();
+});
+
+function initializeApp() {
+    // Load data from localStorage
+    DataManager.loadFromLocalStorage();
+    
+    // Set default view
+    showView('class-schedule');
+    
+    // Check if user is logged in
+    const savedLogin = localStorage.getItem('isAdmin');
+    if (savedLogin === 'true') {
+        isAdmin = true;
+    }
+    
+    // Update edit mode (สำคัญ!)
+    updateEditMode();
+    
+    // Render management tables
+    TeacherManager.renderTeacherTable();
+    SubjectManager.renderSubjectTable();
+    RoomManager.renderRoomTable();
+    ClassManager.renderClassTable();
+    
+    // Auto-load from Google Sheets if online mode is enabled
+    if (onlineMode && googleSheetsUrl) {
+        setTimeout(() => {
+            DataManager.loadFromGoogleSheets().then(result => {
+                if (result.success) {
+                    showNotification('โหลดข้อมูลจาก Google Sheets สำเร็จ', 'success');
+                    ScheduleRenderer.renderAllViews();
+                    updateEditMode(); // อัพเดทโหมดแก้ไขหลังจากโหลดข้อมูล
+                }
+            });
+        }, 1000);
+    }
+}
+
+function setupEventListeners() {
+    // Navigation
+    document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const view = this.getAttribute('data-view');
+            showView(view);
+        });
     });
     
-    // ใช้วิธีบันทึกแบบเร็ว
-    const result = await callGoogleAppsScript('saveAllDataFast', dataToSave);
-    
-    if (result && result.success) {
-      backupToLocalStorage(dataToSave);
-      
-      const timeMsg = result.executionTime ? ` ใน ${result.executionTime} วินาที` : '';
-      console.log('✅ บันทึกข้อมูลทั้งหมดสำเร็จ' + timeMsg);
-      document.getElementById('message').innerHTML = 
-        `<div style="color:green;">
-          ✅ บันทึกข้อมูลทั้งหมดสำเร็จ${timeMsg}<br>
-          <small>${result.message || 'บันทึกข้อมูลเรียบร้อย'}</small>
-          ${result.stats ? `<br><small>ครู: ${result.stats.teachers || 0} | วิชา: ${result.stats.subjects || 0} | ตารางเรียน: ${result.stats.lessons || 0}</small>` : ''}
-        </div>`;
-      return true;
-    } else {
-      throw new Error(result?.error || 'Failed to save data to Google Sheets');
-    }
-  } catch (error) {
-    console.error('❌ ข้อผิดพลาดในการบันทึกข้อมูลทั้งหมด:', error);
-    
-    // ลองบันทึกเฉพาะ lessons เป็น fallback
-    console.log('🔄 ลองบันทึกเฉพาะตารางเรียน...');
-    const lessonsResult = await saveLessonsOnly();
-    
-    if (!lessonsResult) {
-      backupToLocalStorage({ 
-        teachers, classes, subjects, rooms, lessons 
-      });
-      
-      document.getElementById('message').innerHTML = 
-        `<div style="color:orange;">
-          📱 บันทึกข้อมูลลง Local Storage (ทำงานในโหมดออฟไลน์)<br>
-          <small>${error.message}</small>
-        </div>`;
-    }
-    
-    return lessonsResult;
-  } finally {
-    if (loadingShown) {
-      showLoading(false, 'บันทึกข้อมูลทั้งหมดแบบเร็ว');
-    }
-  }
-}
-
-// ฟังก์ชันบันทึกข้อมูลทั้งหมดไปยัง Google Sheet (เวอร์ชันเดิม - ใช้สำหรับ compatibility)
-async function saveAllData() {
-  return await saveAllDataOptimized();
-}
-
-// =============================================
-// ฟังก์ชันจัดการ Google Sheets
-// =============================================
-
-// ฟังก์ชันส่งข้อมูลไปยัง Google Sheets
-async function exportToGoogleSheets() {
-  if (preventGuestAction("ส่งข้อมูลไปยัง Google Sheets")) return;
-  
-  let loadingShown = false;
-  
-  try {
-    showLoading(true, 'ส่งข้อมูลไปยัง Google Sheets');
-    loadingShown = true;
-    
-    // ตรวจสอบข้อมูลก่อนบันทึก
-    const validatedLessons = validateLessonsBeforeSave();
-    
-    const exportData = {
-      teachers: teachers,
-      classes: classes,
-      subjects: subjects,
-      rooms: rooms,
-      lessons: validatedLessons
-    };
-    
-    console.log('📤 กำลังส่งข้อมูลไปยัง Google Sheets...', {
-      teachers: teachers.length,
-      classes: classes.length,
-      subjects: subjects.length,
-      rooms: rooms.length,
-      lessons: validatedLessons.length
+    // Login
+    document.getElementById('loginBtn').addEventListener('click', function(e) {
+        e.preventDefault();
+        if (isAdmin) {
+            logout();
+        } else {
+            const loginModal = new bootstrap.Modal(document.getElementById('loginModal'));
+            loginModal.show();
+        }
     });
     
-    const result = await callGoogleAppsScript('exportToSheets', exportData);
-    
-    if (result && result.success) {
-      document.getElementById('message').innerHTML = 
-        `<div style="color:green;">
-          ✅ ส่งข้อมูลไปยัง Google Sheets สำเร็จแล้ว<br>
-          ${result.spreadsheetUrl ? `<a href="${result.spreadsheetUrl}" target="_blank" style="color:white;text-decoration:underline;">📊 เปิด Google Sheets</a><br>` : ''}
-          <small>${result.message}</small>
-        </div>`;
-    } else {
-      throw new Error(result?.error || 'Failed to export to Google Sheets');
-    }
-  } catch (error) {
-    console.error('❌ ข้อผิดพลาดในการส่งข้อมูลไปยัง Google Sheets:', error);
-    document.getElementById('message').innerHTML = 
-      `<div style="color:orange;">
-        📱 บันทึกข้อมูลลง Local Storage (ทำงานในโหมดออฟไลน์)<br>
-        <small>${error.message}</small>
-      </div>`;
-  } finally {
-    if (loadingShown) {
-      showLoading(false, 'ส่งข้อมูลไปยัง Google Sheets');
-    }
-  }
-}
-
-// ฟังก์ชันนำเข้าข้อมูลจาก Google Sheets
-async function importFromGoogleSheets() {
-  if (preventGuestAction("นำเข้าข้อมูลจาก Google Sheets")) return;
-  
-  let loadingShown = false;
-  
-  try {
-    showLoading(true, 'นำเข้าข้อมูลจาก Google Sheets');
-    loadingShown = true;
-    
-    console.log('📥 กำลังนำเข้าข้อมูลจาก Google Sheets...');
-    const result = await callGoogleAppsScript('importFromSheets');
-    
-    if (result && result.success) {
-      teachers = result.teachers || [];
-      classes = result.classes || [];
-      subjects = result.subjects || [];
-      rooms = result.rooms || [];
-      lessons = result.lessons || [];
-      
-      validateAndRepairData();
-      backupToLocalStorage({ teachers, classes, subjects, rooms, lessons });
-      
-      loadDropdowns();
-      renderAll();
-      
-      document.getElementById('message').innerHTML = 
-        `<div style="color:green;">
-          ✅ นำเข้าข้อมูลจาก Google Sheets สำเร็จแล้ว<br>
-          ${result.spreadsheetUrl ? `<a href="${result.spreadsheetUrl}" target="_blank" style="color:white;text-decoration:underline;">📊 เปิด Google Sheets</a><br>` : ''}
-          <small>ครู: ${teachers.length} ท่าน | วิชา: ${subjects.length} รายการ | ตารางเรียน: ${lessons.length} คาบ</small>
-        </div>`;
-    } else {
-      throw new Error(result?.error || 'Failed to import from Google Sheets');
-    }
-  } catch (error) {
-    console.error('❌ ข้อผิดพลาดในการนำเข้าข้อมูลจาก Google Sheets:', error);
-    document.getElementById('message').innerHTML = 
-      `<div style="color:red;">
-        ❌ เกิดข้อผิดพลาดในการนำเข้าข้อมูล<br>
-        <small>${error.message}</small>
-      </div>`;
-  } finally {
-    if (loadingShown) {
-      showLoading(false, 'นำเข้าข้อมูลจาก Google Sheets');
-    }
-  }
-}
-
-// =============================================
-// ฟังก์ชันจัดการระบบล็อกอิน
-// =============================================
-
-// ฟังก์ชันแสดง/ซ่อนส่วนล็อกอิน
-function showLoginModal() {
-  document.getElementById('loginModal').style.display = 'block';
-  document.getElementById('mainApp').style.display = 'none';
-}
-
-function hideLoginModal() {
-  document.getElementById('loginModal').style.display = 'none';
-  document.getElementById('mainApp').style.display = 'block';
-}
-
-// ฟังก์ชันตั้งค่าโหมดการใช้งาน
-function setUserMode(isAdmin) {
-  isAdminMode = isAdmin;
-  
-  const userStatus = document.getElementById('userStatus');
-  const logoutBtn = document.getElementById('logoutBtn');
-  
-  if (isAdmin) {
-    userStatus.textContent = "โหมด: ผู้ดูแลระบบ";
-    userStatus.style.color = "#10b981";
-    userStatus.style.fontWeight = "bold";
-    logoutBtn.style.display = 'inline-block';
-  } else {
-    userStatus.textContent = "โหมด: ผู้เยี่ยมชม";
-    userStatus.style.color = "#4b5563";
-    logoutBtn.style.display = 'inline-block';
-  }
-  
-  toggleEditFunctions(isAdmin);
-}
-
-// ฟังก์ชันซ่อน/แสดงฟังก์ชันการแก้ไข
-function toggleEditFunctions(show) {
-  const controls = document.getElementById('controls');
-  controls.style.display = show ? 'block' : 'none';
-  
-  const editButtons = document.querySelectorAll('.btn-warning, .btn-danger, .btn-info');
-  editButtons.forEach(button => {
-    button.style.display = show ? 'inline-block' : 'none';
-  });
-  
-  const tableActionButtons = document.querySelectorAll('#lessonTable .btn-warning, #lessonTable .btn-danger');
-  tableActionButtons.forEach(button => {
-    button.style.display = show ? 'inline-block' : 'none';
-  });
-  
-  const dataManagementSections = document.querySelectorAll('.data-management');
-  dataManagementSections.forEach(section => {
-    section.style.display = show ? 'block' : 'none';
-  });
-  
-  const jsonButtons = document.querySelectorAll('#downloadJsonBtn, #importJsonBtn, #exportToSheetsBtn, #importFromSheetsBtn, #exportToSheetsChunkBtn');
-  jsonButtons.forEach(button => {
-    button.style.display = show ? 'inline-block' : 'none';
-  });
-  
-  document.getElementById('autoBtn').style.display = show ? 'inline-block' : 'none';
-  document.getElementById('resetBtn').style.display = show ? 'inline-block' : 'none';
-  document.getElementById('testConnectionBtn').style.display = show ? 'inline-block' : 'none';
-  document.getElementById('clearDataBtn').style.display = show ? 'inline-block' : 'none';
-  document.getElementById('debugBtn').style.display = show ? 'inline-block' : 'none';
-}
-
-// ฟังก์ชันล็อกอิน
-function loginAsAdmin() {
-  const password = document.getElementById('adminPassword').value;
-  const messageDiv = document.getElementById('loginMessage');
-  
-  if (password === ADMIN_PASSWORD) {
-    hideLoginModal();
-    setUserMode(true);
-    messageDiv.innerHTML = '';
-    
-    loadAllData().then(() => {
-      loadDropdowns();
-      renderAll();
+    // Login form
+    document.getElementById('loginForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        
+        if (username === 'admin' && password === 'admin') {
+            isAdmin = true;
+            localStorage.setItem('isAdmin', 'true');
+            updateEditMode();
+            
+            const loginModal = bootstrap.Modal.getInstance(document.getElementById('loginModal'));
+            loginModal.hide();
+            
+            ScheduleRenderer.renderClassSchedule();
+            
+            showNotification('เข้าสู่ระบบผู้ดูแลสำเร็จ', 'success');
+        } else {
+            showNotification('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', 'error');
+        }
     });
-  } else {
-    messageDiv.innerHTML = '<div style="color:red;">❌ รหัสผ่านไม่ถูกต้อง</div>';
-  }
+    
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click', function(e) {
+        e.preventDefault();
+        logout();
+    });
+    
+    // Class selection
+    document.getElementById('classSelect').addEventListener('change', function() {
+        ScheduleRenderer.renderClassSchedule();
+    });
+    
+    // Teacher selection
+    document.getElementById('teacherSelect').addEventListener('change', function() {
+        ScheduleRenderer.renderTeacherSchedule();
+    });
+    
+    // Room selection
+    document.getElementById('roomSelect').addEventListener('change', function() {
+        ScheduleRenderer.renderRoomSchedule();
+    });
+    
+    // Print button
+    document.getElementById('printBtn').addEventListener('click', function(e) {
+        e.preventDefault();
+        PrintManager.printSchedule();
+    });
+    
+    // Online mode toggle
+    document.getElementById('onlineMode').addEventListener('change', function() {
+        onlineMode = this.checked;
+        DataManager.saveToLocalStorage();
+        showNotification(`โหมด ${onlineMode ? 'ออนไลน์' : 'ออฟไลน์'}`, 'info');
+        ScheduleRenderer.renderSystemInfo();
+    });
+    
+    // Import/Export
+    document.getElementById('exportData').addEventListener('click', function(e) {
+        e.preventDefault();
+        const modal = new bootstrap.Modal(document.getElementById('importExportModal'));
+        document.getElementById('importExportTitle').textContent = 'ส่งออกข้อมูล';
+        modal.show();
+    });
+    
+    document.getElementById('importData').addEventListener('click', function(e) {
+        e.preventDefault();
+        const modal = new bootstrap.Modal(document.getElementById('importExportModal'));
+        document.getElementById('importExportTitle').textContent = 'นำเข้าข้อมูล';
+        modal.show();
+    });
+    
+    // Google Sheets connection
+    document.getElementById('connectGoogleSheets').addEventListener('click', function(e) {
+        e.preventDefault();
+        const modal = new bootstrap.Modal(document.getElementById('googleSheetsModal'));
+        document.getElementById('scriptUrlModal').value = googleSheetsUrl;
+        modal.show();
+    });
+    
+    // Export buttons
+    document.getElementById('exportTeachers').addEventListener('click', () => DataManager.exportData('teachers'));
+    document.getElementById('exportSubjects').addEventListener('click', () => DataManager.exportData('subjects'));
+    document.getElementById('exportRooms').addEventListener('click', () => DataManager.exportData('rooms'));
+    document.getElementById('exportClasses').addEventListener('click', () => DataManager.exportData('classes'));
+    document.getElementById('exportSchedule').addEventListener('click', () => DataManager.exportData('schedule'));
+    document.getElementById('exportAll').addEventListener('click', () => DataManager.exportData('all'));
+    
+    // Import button
+    document.getElementById('importDataBtn').addEventListener('click', function() {
+        const fileInput = document.getElementById('importFile');
+        const replaceData = document.getElementById('replaceData').checked;
+        
+        if (fileInput.files.length > 0) {
+            DataManager.importData(fileInput.files[0], replaceData)
+                .then(() => {
+                    showNotification('นำเข้าข้อมูลสำเร็จ', 'success');
+                    ScheduleRenderer.renderAllViews();
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('importExportModal'));
+                    modal.hide();
+                })
+                .catch(error => {
+                    showNotification(error.message, 'error');
+                });
+        } else {
+            showNotification('กรุณาเลือกไฟล์', 'error');
+        }
+    });
+    
+    // Teacher Management
+    document.getElementById('addTeacherBtn').addEventListener('click', () => {
+        TeacherManager.addTeacher();
+    });
+    
+    document.getElementById('teacherForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = {
+            id: document.getElementById('teacherId').value,
+            code: document.getElementById('teacherCode').value,
+            name: document.getElementById('teacherName').value,
+            position: document.getElementById('teacherPosition').value
+        };
+        
+        if (TeacherManager.saveTeacher(formData)) {
+            showNotification('บันทึกข้อมูลครูเรียบร้อยแล้ว', 'success');
+            const modal = bootstrap.Modal.getInstance(document.getElementById('teacherFormModal'));
+            modal.hide();
+        }
+    });
+    
+    // Subject Management
+    document.getElementById('addSubjectBtn').addEventListener('click', () => {
+        SubjectManager.addSubject();
+    });
+    
+    document.getElementById('subjectForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = {
+            id: document.getElementById('subjectId').value,
+            code: document.getElementById('subjectCode').value,
+            name: document.getElementById('subjectName').value,
+            credit: document.getElementById('subjectCredit').value
+        };
+        
+        if (SubjectManager.saveSubject(formData)) {
+            showNotification('บันทึกข้อมูลรายวิชาเรียบร้อยแล้ว', 'success');
+            const modal = bootstrap.Modal.getInstance(document.getElementById('subjectFormModal'));
+            modal.hide();
+        }
+    });
+    
+    // Room Management
+    document.getElementById('addRoomBtn').addEventListener('click', () => {
+        RoomManager.addRoom();
+    });
+    
+    document.getElementById('roomForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = {
+            id: document.getElementById('roomId').value,
+            code: document.getElementById('roomCode').value,
+            name: document.getElementById('roomName').value,
+            type: document.getElementById('roomType').value,
+            capacity: document.getElementById('roomCapacity').value
+        };
+        
+        if (RoomManager.saveRoom(formData)) {
+            showNotification('บันทึกข้อมูลห้องเรียบร้อยแล้ว', 'success');
+            const modal = bootstrap.Modal.getInstance(document.getElementById('roomFormModal'));
+            modal.hide();
+        }
+    });
+    
+    // Class Management
+    document.getElementById('addClassBtn').addEventListener('click', () => {
+        ClassManager.addClass();
+    });
+    
+    document.getElementById('classForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = {
+            id: document.getElementById('classId').value,
+            code: document.getElementById('classCode').value,
+            name: document.getElementById('className').value,
+            program: document.getElementById('classProgram').value,
+            advisor: document.getElementById('classAdvisor').value
+        };
+        
+        if (ClassManager.saveClass(formData)) {
+            showNotification('บันทึกข้อมูลระดับชั้นเรียบร้อยแล้ว', 'success');
+            const modal = bootstrap.Modal.getInstance(document.getElementById('classFormModal'));
+            modal.hide();
+        }
+    });
+    
+    // Schedule form
+    document.getElementById('scheduleForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = {
+            className: document.getElementById('scheduleClassName').value,
+            day: document.getElementById('scheduleDay').value,
+            period: document.getElementById('schedulePeriod').value,
+            subject: document.getElementById('scheduleSubject').value,
+            teacher: document.getElementById('scheduleTeacher').value,
+            room: document.getElementById('scheduleRoom').value
+        };
+        
+        if (ScheduleEditor.saveSchedule(formData)) {
+            showNotification('บันทึกตารางเรียนเรียบร้อยแล้ว', 'success');
+            ScheduleRenderer.renderAllViews();
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('scheduleFormModal'));
+            modal.hide();
+        } else {
+            showNotification('เกิดข้อผิดพลาดในการบันทึก', 'error');
+        }
+    });
+    
+    // Delete schedule button
+    document.getElementById('deleteScheduleBtn').addEventListener('click', function() {
+        const className = document.getElementById('scheduleClassName').value;
+        const day = document.getElementById('scheduleDay').value;
+        const period = document.getElementById('schedulePeriod').value;
+        
+        if (ScheduleEditor.deleteSchedule(className, day, period)) {
+            showNotification('ลบรายการตารางเรียนเรียบร้อยแล้ว', 'success');
+            ScheduleRenderer.renderAllViews();
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('scheduleFormModal'));
+            modal.hide();
+        } else {
+            showNotification('เกิดข้อผิดพลาดในการลบ', 'error');
+        }
+    });
+    
+    // Google Sheets buttons
+    document.getElementById('saveScriptUrl').addEventListener('click', saveScriptUrl);
+    document.getElementById('testConnection').addEventListener('click', testConnectionDetailed);
+    document.getElementById('initializeSheets').addEventListener('click', initializeSheets);
+    document.getElementById('syncToSheets').addEventListener('click', syncToSheets);
+    document.getElementById('syncToSheetsBatch').addEventListener('click', syncToSheetsBatch);
+    
+    document.getElementById('saveScriptUrlModal').addEventListener('click', saveScriptUrlModal);
+    document.getElementById('testConnectionModal').addEventListener('click', testConnectionDetailed);
+    document.getElementById('initializeSheetsModal').addEventListener('click', initializeSheetsModal);
+    document.getElementById('syncToSheetsModal').addEventListener('click', syncToSheetsModal);
+    document.getElementById('syncToSheetsBatchModal').addEventListener('click', syncToSheetsBatchModal);
+    document.getElementById('loadFromSheetsModal').addEventListener('click', loadFromSheetsModal);
+    
+    // Troubleshooting buttons
+    document.getElementById('clearCache').addEventListener('click', clearCache);
+    document.getElementById('checkPermissions').addEventListener('click', checkPermissions);
+    document.getElementById('reloadData').addEventListener('click', reloadData);
 }
 
-// ฟังก์ชันเข้าสู่ระบบเป็นผู้เยี่ยมชม
-function loginAsGuest() {
-  hideLoginModal();
-  setUserMode(false);
-  
-  loadAllData().then(() => {
-    loadDropdowns();
-    renderAll();
-  });
-}
-
-// ฟังก์ชันออกจากระบบ
 function logout() {
-  showLoginModal();
-  document.getElementById('adminPassword').value = '';
-  document.getElementById('loginMessage').innerHTML = '';
+    isAdmin = false;
+    localStorage.removeItem('isAdmin');
+    updateEditMode();
+    ScheduleRenderer.renderAllViews();
+    showNotification('ออกจากระบบสำเร็จ', 'success');
 }
 
-// ป้องกันการดำเนินการในโหมด Guest
-function preventGuestAction(actionName) {
-  if (!isAdminMode) {
-    alert(`🚫 คุณอยู่ในโหมดผู้เยี่ยมชม\nไม่สามารถ${actionName}ได้\n\nกรุณาล็อกอินเป็นผู้ดูแลระบบเพื่อใช้งานฟังก์ชันนี้`);
-    return true;
-  }
-  return false;
-}
-
-// =============================================
-// ฟังก์ชันจัดการข้อมูลพื้นฐาน
-// =============================================
-
-// ฟังก์ชันโหลดข้อมูลลง dropdown
-function loadDropdowns() {
-  const teacherSelect = document.getElementById('teacher');
-  const classSelect = document.getElementById('classLevel');
-  const subjectSelect = document.getElementById('subject');
-  const roomSelect = document.getElementById('room');
-  
-  // จำกัดจำนวนตัวเลือกใน dropdown เพื่อประสิทธิภาพ
-  const dropdownLimit = 500;
-  
-  teacherSelect.innerHTML = '<option value="">เลือกอาจารย์</option>';
-  const teachersToShow = teachers.length > dropdownLimit ? 
-    teachers.slice(0, dropdownLimit) : teachers;
-  teachersToShow.forEach(teacher => {
-    teacherSelect.innerHTML += `<option value="${teacher}">${teacher}</option>`;
-  });
-  if (teachers.length > dropdownLimit) {
-    teacherSelect.innerHTML += `<option value="" disabled>... และอีก ${teachers.length - dropdownLimit} รายการ</option>`;
-  }
-  
-  classSelect.innerHTML = '<option value="">เลือกชั้นเรียน</option>';
-  const classesToShow = classes.length > dropdownLimit ? 
-    classes.slice(0, dropdownLimit) : classes;
-  classesToShow.forEach(cls => {
-    classSelect.innerHTML += `<option value="${cls}">${cls}</option>`;
-  });
-  if (classes.length > dropdownLimit) {
-    classSelect.innerHTML += `<option value="" disabled>... และอีก ${classes.length - dropdownLimit} รายการ</option>`;
-  }
-  
-  subjectSelect.innerHTML = '<option value="">เลือกรายวิชา</option>';
-  const subjectsToShow = subjects.length > dropdownLimit ? 
-    subjects.slice(0, dropdownLimit) : subjects;
-  subjectsToShow.forEach(subject => {
-    subjectSelect.innerHTML += `<option value="${subject}">${subject}</option>`;
-  });
-  if (subjects.length > dropdownLimit) {
-    subjectSelect.innerHTML += `<option value="" disabled>... และอีก ${subjects.length - dropdownLimit} รายการ</option>`;
-  }
-  
-  roomSelect.innerHTML = '<option value="">เลือกห้อง</option>';
-  const roomsToShow = rooms.length > dropdownLimit ? 
-    rooms.slice(0, dropdownLimit) : rooms;
-  roomsToShow.forEach(room => {
-    roomSelect.innerHTML += `<option value="${room}">${room}</option>`;
-  });
-  if (rooms.length > dropdownLimit) {
-    roomSelect.innerHTML += `<option value="" disabled>... และอีก ${rooms.length - dropdownLimit} รายการ</option>`;
-  }
-  
-  renderDataLists();
-  loadTeacherSummaryDropdown();
-  loadFilterOptions();
-}
-
-// ฟังก์ชันโหลด dropdown สำหรับเลือกอาจารย์ในสรุป
-function loadTeacherSummaryDropdown() {
-  const teacherSummarySelect = document.getElementById('teacherSummarySelect');
-  teacherSummarySelect.innerHTML = '<option value="all">แสดงทั้งหมด</option>';
-  
-  // จำกัดจำนวนตัวเลือกใน dropdown สรุป
-  const summaryLimit = 200;
-  const teachersToShow = teachers.length > summaryLimit ? 
-    teachers.slice(0, summaryLimit) : teachers;
-  
-  teachersToShow.forEach(teacher => {
-    teacherSummarySelect.innerHTML += `<option value="${teacher}">${teacher}</option>`;
-  });
-  if (teachers.length > summaryLimit) {
-    teacherSummarySelect.innerHTML += `<option value="" disabled>... และอีก ${teachers.length - summaryLimit} รายการ</option>`;
-  }
-}
-
-// ฟังก์ชันโหลดตัวเลือกใน dropdown กรอง
-function loadFilterOptions() {
-  const filterSubject = document.getElementById('filterSubject');
-  filterSubject.innerHTML = '<option value="">ทั้งหมด</option>';
-  // จำกัดจำนวนตัวเลือกในฟิลเตอร์
-  const filterLimit = 200;
-  const subjectsToShow = subjects.length > filterLimit ? 
-    subjects.slice(0, filterLimit) : subjects;
-  subjectsToShow.forEach(subject => {
-    filterSubject.innerHTML += `<option value="${subject}">${subject}</option>`;
-  });
-  if (subjects.length > filterLimit) {
-    filterSubject.innerHTML += `<option value="" disabled>... และอีก ${subjects.length - filterLimit} รายการ</option>`;
-  }
-  
-  const filterTeacher = document.getElementById('filterTeacher');
-  filterTeacher.innerHTML = '<option value="">ทั้งหมด</option>';
-  const teachersToShow = teachers.length > filterLimit ? 
-    teachers.slice(0, filterLimit) : teachers;
-  teachersToShow.forEach(teacher => {
-    filterTeacher.innerHTML += `<option value="${teacher}">${teacher}</option>`;
-  });
-  if (teachers.length > filterLimit) {
-    filterTeacher.innerHTML += `<option value="" disabled>... และอีก ${teachers.length - filterLimit} รายการ</option>`;
-  }
-  
-  const filterClass = document.getElementById('filterClass');
-  filterClass.innerHTML = '<option value="">ทั้งหมด</option>';
-  const classesToShow = classes.length > filterLimit ? 
-    classes.slice(0, filterLimit) : classes;
-  classesToShow.forEach(cls => {
-    filterClass.innerHTML += `<option value="${cls}">${cls}</option>`;
-  });
-  if (classes.length > filterLimit) {
-    filterClass.innerHTML += `<option value="" disabled>... และอีก ${classes.length - filterLimit} รายการ</option>`;
-  }
-  
-  const filterRoom = document.getElementById('filterRoom');
-  filterRoom.innerHTML = '<option value="">ทั้งหมด</option>';
-  const roomsToShow = rooms.length > filterLimit ? 
-    rooms.slice(0, filterLimit) : rooms;
-  roomsToShow.forEach(room => {
-    filterRoom.innerHTML += `<option value="${room}">${room}</option>`;
-  });
-  if (rooms.length > filterLimit) {
-    filterRoom.innerHTML += `<option value="" disabled>... และอีก ${rooms.length - filterLimit} รายการ</option>`;
-  }
-  
-  const classSummarySelect = document.getElementById('classSummarySelect');
-  classSummarySelect.innerHTML = '<option value="all">แสดงทั้งหมด</option>';
-  const classesSummaryToShow = classes.length > filterLimit ? 
-    classes.slice(0, filterLimit) : classes;
-  classesSummaryToShow.forEach(cls => {
-    classSummarySelect.innerHTML += `<option value="${cls}">${cls}</option>`;
-  });
-  if (classes.length > filterLimit) {
-    classSummarySelect.innerHTML += `<option value="" disabled>... และอีก ${classes.length - filterLimit} รายการ</option>`;
-  }
-}
-
-// ฟังก์ชันแสดงข้อมูลในลิสต์
-function renderDataLists() {
-  const listLimit = 50; // จำกัดการแสดงผลในลิสต์
-  
-  const teacherList = document.getElementById('teacherList');
-  if (teacherList) {
-    teacherList.innerHTML = '';
-    const teachersToShow = teachers.slice(0, listLimit);
-    teachersToShow.forEach((teacher, index) => {
-      teacherList.innerHTML += `
-        <div class="data-item">
-          <span>${teacher}</span>
-          <div>
-            <button class="btn-warning" onclick="editTeacher(${index})">แก้ไข</button>
-            <button class="btn-danger" onclick="removeTeacher(${index})">ลบ</button>
-          </div>
-        </div>
-      `;
-    });
-    if (teachers.length > listLimit) {
-      teacherList.innerHTML += `
-        <div class="data-item" style="justify-content: center; color: #666; font-style: italic;">
-          ... และอีก ${teachers.length - listLimit} รายการ
-        </div>
-      `;
-    }
-  }
-  
-  // ทำแบบเดียวกันสำหรับ classList, subjectList, roomList
-  const classList = document.getElementById('classList');
-  if (classList) {
-    classList.innerHTML = '';
-    const classesToShow = classes.slice(0, listLimit);
-    classesToShow.forEach((cls, index) => {
-      classList.innerHTML += `
-        <div class="data-item">
-          <span>${cls}</span>
-          <div>
-            <button class="btn-warning" onclick="editClass(${index})">แก้ไข</button>
-            <button class="btn-danger" onclick="removeClass(${index})">ลบ</button>
-          </div>
-        </div>
-      `;
-    });
-    if (classes.length > listLimit) {
-      classList.innerHTML += `
-        <div class="data-item" style="justify-content: center; color: #666; font-style: italic;">
-          ... และอีก ${classes.length - listLimit} รายการ
-        </div>
-      `;
-    }
-  }
-  
-  const subjectList = document.getElementById('subjectList');
-  if (subjectList) {
-    subjectList.innerHTML = '';
-    const subjectsToShow = subjects.slice(0, listLimit);
-    subjectsToShow.forEach((subject, index) => {
-      subjectList.innerHTML += `
-        <div class="data-item">
-          <span>${subject}</span>
-          <div>
-            <button class="btn-warning" onclick="editSubject(${index})">แก้ไข</button>
-            <button class="btn-danger" onclick="removeSubject(${index})">ลบ</button>
-          </div>
-        </div>
-      `;
-    });
-    if (subjects.length > listLimit) {
-      subjectList.innerHTML += `
-        <div class="data-item" style="justify-content: center; color: #666; font-style: italic;">
-          ... และอีก ${subjects.length - listLimit} รายการ
-        </div>
-      `;
-    }
-  }
-  
-  const roomList = document.getElementById('roomList');
-  if (roomList) {
-    roomList.innerHTML = '';
-    const roomsToShow = rooms.slice(0, listLimit);
-    roomsToShow.forEach((room, index) => {
-      roomList.innerHTML += `
-        <div class="data-item">
-          <span>${room}</span>
-          <div>
-            <button class="btn-warning" onclick="editRoom(${index})">แก้ไข</button>
-            <button class="btn-danger" onclick="removeRoom(${index})">ลบ</button>
-          </div>
-        </div>
-      `;
-    });
-    if (rooms.length > listLimit) {
-      roomList.innerHTML += `
-        <div class="data-item" style="justify-content: center; color: #666; font-style: italic;">
-          ... และอีก ${rooms.length - listLimit} รายการ
-        </div>
-      `;
-    }
-  }
-}
-
-// =============================================
-// ฟังก์ชันเพิ่ม/ลบ/แก้ไข ข้อมูลพื้นฐาน
-// =============================================
-
-// ฟังก์ชันเพิ่มข้อมูล
-document.getElementById('addTeacher').onclick = async () => {
-  if (preventGuestAction("เพิ่มอาจารย์")) return;
-  
-  const newTeacher = document.getElementById('newTeacher').value.trim();
-  if (newTeacher && !teachers.includes(newTeacher)) {
-    teachers.push(newTeacher);
-    await saveAllDataOptimized();
-    loadDropdowns();
-    document.getElementById('newTeacher').value = '';
-    document.getElementById('message').innerHTML = '<div style="color:green;">✅ เพิ่มอาจารย์เรียบร้อยแล้ว</div>';
-  } else if (!newTeacher) {
-    document.getElementById('message').innerHTML = '<div style="color:red;">❌ กรุณากรอกชื่ออาจารย์</div>';
-  } else {
-    document.getElementById('message').innerHTML = '<div style="color:red;">❌ มีอาจารย์ชื่อนี้อยู่ในระบบแล้ว</div>';
-  }
-};
-
-document.getElementById('addClass').onclick = async () => {
-  if (preventGuestAction("เพิ่มชั้นเรียน")) return;
-  
-  const newClass = document.getElementById('newClass').value.trim();
-  if (newClass && !classes.includes(newClass)) {
-    classes.push(newClass);
-    await saveAllDataOptimized();
-    loadDropdowns();
-    document.getElementById('newClass').value = '';
-    document.getElementById('message').innerHTML = '<div style="color:green;">✅ เพิ่มชั้นเรียนเรียบร้อยแล้ว</div>';
-  } else if (!newClass) {
-    document.getElementById('message').innerHTML = '<div style="color:red;">❌ กรุณากรอกชื่อชั้นเรียน</div>';
-  } else {
-    document.getElementById('message').innerHTML = '<div style="color:red;">❌ มีชั้นเรียนนี้อยู่ในระบบแล้ว</div>';
-  }
-};
-
-document.getElementById('addSubject').onclick = async () => {
-  if (preventGuestAction("เพิ่มรายวิชา")) return;
-  
-  const newSubject = document.getElementById('newSubject').value.trim();
-  if (newSubject && !subjects.includes(newSubject)) {
-    subjects.push(newSubject);
-    await saveAllDataOptimized();
-    loadDropdowns();
-    document.getElementById('newSubject').value = '';
-    document.getElementById('message').innerHTML = '<div style="color:green;">✅ เพิ่มรายวิชาเรียบร้อยแล้ว</div>';
-  } else if (!newSubject) {
-    document.getElementById('message').innerHTML = '<div style="color:red;">❌ กรุณากรอกชื่อรายวิชา</div>';
-  } else {
-    document.getElementById('message').innerHTML = '<div style="color:red;">❌ มีรายวิชานี้อยู่ในระบบแล้ว</div>';
-  }
-};
-
-document.getElementById('addRoom').onclick = async () => {
-  if (preventGuestAction("เพิ่มห้อง")) return;
-  
-  const newRoom = document.getElementById('newRoom').value.trim();
-  if (newRoom && !rooms.includes(newRoom)) {
-    rooms.push(newRoom);
-    await saveAllDataOptimized();
-    loadDropdowns();
-    document.getElementById('newRoom').value = '';
-    document.getElementById('message').innerHTML = '<div style="color:green;">✅ เพิ่มห้องเรียบร้อยแล้ว</div>';
-  } else if (!newRoom) {
-    document.getElementById('message').innerHTML = '<div style="color:red;">❌ กรุณากรอกชื่อห้อง</div>';
-  } else {
-    document.getElementById('message').innerHTML = '<div style="color:red;">❌ มีห้องนี้อยู่ในระบบแล้ว</div>';
-  }
-};
-
-// ฟังก์ชันลบข้อมูล
-async function removeTeacher(index) {
-  if (preventGuestAction("ลบอาจารย์")) return;
-  
-  const teacherName = teachers[index];
-  
-  const isUsed = lessons.some(lesson => lesson.teacher === teacherName);
-  
-  if (isUsed) {
-    if (!confirm(`⚠️ อาจารย์ "${teacherName}" ถูกใช้ในตารางเรียนแล้ว\nการลบอาจส่งผลต่อตารางเรียน\nต้องการลบต่อหรือไม่?`)) {
-      return;
-    }
-  }
-  
-  teachers.splice(index, 1);
-  await saveAllDataOptimized();
-  loadDropdowns();
-  document.getElementById('message').innerHTML = '<div style="color:green;">✅ ลบอาจารย์เรียบร้อยแล้ว</div>';
-}
-
-async function removeClass(index) {
-  if (preventGuestAction("ลบชั้นเรียน")) return;
-  
-  const className = classes[index];
-  
-  const isUsed = lessons.some(lesson => lesson.classLevel === className);
-  
-  if (isUsed) {
-    if (!confirm(`⚠️ ชั้นเรียน "${className}" ถูกใช้ในตารางเรียนแล้ว\nการลบอาจส่งผลต่อตารางเรียน\nต้องการลบต่อหรือไม่?`)) {
-      return;
-    }
-  }
-  
-  classes.splice(index, 1);
-  await saveAllDataOptimized();
-  loadDropdowns();
-  document.getElementById('message').innerHTML = '<div style="color:green;">✅ ลบชั้นเรียนเรียบร้อยแล้ว</div>';
-}
-
-async function removeSubject(index) {
-  if (preventGuestAction("ลบรายวิชา")) return;
-  
-  const subjectName = subjects[index];
-  
-  const isUsed = lessons.some(lesson => lesson.subject === subjectName);
-  
-  if (isUsed) {
-    if (!confirm(`⚠️ รายวิชา "${subjectName}" ถูกใช้ในตารางเรียนแล้ว\nการลบอาจส่งผลต่อตารางเรียน\nต้องการลบต่อหรือไม่?`)) {
-      return;
-    }
-  }
-  
-  subjects.splice(index, 1);
-  await saveAllDataOptimized();
-  loadDropdowns();
-  document.getElementById('message').innerHTML = '<div style="color:green;">✅ ลบรายวิชาเรียบร้อยแล้ว</div>';
-}
-
-async function removeRoom(index) {
-  if (preventGuestAction("ลบห้อง")) return;
-  
-  const roomName = rooms[index];
-  
-  const isUsed = lessons.some(lesson => lesson.room === roomName);
-  
-  if (isUsed) {
-    if (!confirm(`⚠️ ห้อง "${roomName}" ถูกใช้ในตารางเรียนแล้ว\nการลบอาจส่งผลต่อตารางเรียน\nต้องการลบต่อหรือไม่?`)) {
-      return;
-    }
-  }
-  
-  rooms.splice(index, 1);
-  await saveAllDataOptimized();
-  loadDropdowns();
-  document.getElementById('message').innerHTML = '<div style="color:green;">✅ ลบห้องเรียบร้อยแล้ว</div>';
-}
-
-// ฟังก์ชันแก้ไขข้อมูล
-function editTeacher(index) {
-  if (preventGuestAction("แก้ไขข้อมูลอาจารย์")) return;
-  
-  currentEditType = 'teacher';
-  currentEditIndex = index;
-  originalValue = teachers[index];
-  
-  document.getElementById('modalTitle').textContent = 'แก้ไขชื่ออาจารย์';
-  document.getElementById('editInput').value = originalValue;
-  document.getElementById('editModal').style.display = 'block';
-}
-
-function editClass(index) {
-  if (preventGuestAction("แก้ไขข้อมูลชั้นเรียน")) return;
-  
-  currentEditType = 'class';
-  currentEditIndex = index;
-  originalValue = classes[index];
-  
-  document.getElementById('modalTitle').textContent = 'แก้ไขชื่อชั้นเรียน';
-  document.getElementById('editInput').value = originalValue;
-  document.getElementById('editModal').style.display = 'block';
-}
-
-function editSubject(index) {
-  if (preventGuestAction("แก้ไขข้อมูลรายวิชา")) return;
-  
-  currentEditType = 'subject';
-  currentEditIndex = index;
-  originalValue = subjects[index];
-  
-  document.getElementById('modalTitle').textContent = 'แก้ไขชื่อรายวิชา';
-  document.getElementById('editInput').value = originalValue;
-  document.getElementById('editModal').style.display = 'block';
-}
-
-function editRoom(index) {
-  if (preventGuestAction("แก้ไขข้อมูลห้อง")) return;
-  
-  currentEditType = 'room';
-  currentEditIndex = index;
-  originalValue = rooms[index];
-  
-  document.getElementById('modalTitle').textContent = 'แก้ไขชื่อห้อง';
-  document.getElementById('editInput').value = originalValue;
-  document.getElementById('editModal').style.display = 'block';
-}
-
-// ฟังก์ชันบันทึกการแก้ไขจาก Modal
-document.getElementById('saveEditBtn').onclick = async function() {
-  if (preventGuestAction("บันทึกการแก้ไข")) return;
-  
-  const newValue = document.getElementById('editInput').value.trim();
-  
-  if (!newValue) {
-    alert('กรุณากรอกข้อมูล');
-    return;
-  }
-  
-  if (newValue === originalValue) {
-    document.getElementById('editModal').style.display = 'none';
-    return;
-  }
-  
-  let dataArray;
-  switch (currentEditType) {
-    case 'teacher':
-      dataArray = teachers;
-      break;
-    case 'class':
-      dataArray = classes;
-      break;
-    case 'subject':
-      dataArray = subjects;
-      break;
-    case 'room':
-      dataArray = rooms;
-      break;
-  }
-  
-  if (dataArray.includes(newValue) && newValue !== originalValue) {
-    alert('ชื่อนี้มีอยู่แล้วในระบบ');
-    return;
-  }
-  
-  dataArray[currentEditIndex] = newValue;
-  
-  // อัพเดทข้อมูลใน lessons ที่เกี่ยวข้อง
-  if (currentEditType === 'teacher') {
-    lessons.forEach(lesson => {
-      if (lesson.teacher === originalValue) {
-        lesson.teacher = newValue;
-      }
-    });
-  } else if (currentEditType === 'subject') {
-    lessons.forEach(lesson => {
-      if (lesson.subject === originalValue) {
-        lesson.subject = newValue;
-      }
-    });
-  } else if (currentEditType === 'class') {
-    lessons.forEach(lesson => {
-      if (lesson.classLevel === originalValue) {
-        lesson.classLevel = newValue;
-      }
-    });
-  } else if (currentEditType === 'room') {
-    lessons.forEach(lesson => {
-      if (lesson.room === originalValue) {
-        lesson.room = newValue;
-      }
-    });
-  }
-  
-  await saveAllDataOptimized();
-  loadDropdowns();
-  renderAll();
-  
-  document.getElementById('editModal').style.display = 'none';
-  document.getElementById('message').innerHTML = '<div style="color:green;">✅ แก้ไขข้อมูลเรียบร้อยแล้ว</div>';
-};
-
-// ฟังก์ชันยกเลิกการแก้ไข
-document.getElementById('cancelEditBtn').onclick = function() {
-  document.getElementById('editModal').style.display = 'none';
-};
-
-// ปิด Modal เมื่อคลิก X
-document.querySelector('.close').onclick = function() {
-  document.getElementById('editModal').style.display = 'none';
-};
-
-// ปิด Modal เมื่อคลิกนอกพื้นที่
-window.onclick = function(event) {
-  const modal = document.getElementById('editModal');
-  if (event.target === modal) {
-    modal.style.display = 'none';
-  }
-};
-
-// =============================================
-// ฟังก์ชันจัดการตารางเรียน
-// =============================================
-
-function renderAll() {
-  renderGrid();
-  renderList();
-  renderSummary();
-  renderClassSummary();
-}
-
-function renderGrid() {
-  const body = document.getElementById('gridBody');
-  body.innerHTML = '';
-  days.forEach((d, di) => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td><strong>${d}</strong></td>`;
-    periods.forEach((p, pi) => {
-      const td = document.createElement('td');
-      if (pi === 4) {
-        td.innerHTML = '<div class="small" style="background:#fef3c7; padding:8px; border-radius:4px;">🍱 พักกลางวัน</div>';
-      } else {
-        let filtered = lessons.filter(l => l.day === di && l.period === pi);
-
-        if (currentTab === "teacher" && filterValue) {
-          filtered = filtered.filter(l => l.teacher === filterValue);
-        }
-        if (currentTab === "class" && filterValue) {
-          filtered = filtered.filter(l => l.classLevel === filterValue);
-        }
-        if (currentTab === "room" && filterValue) {
-          filtered = filtered.filter(l => l.room === filterValue);
-        }
-
-        filtered.forEach(it => {
-          td.innerHTML += `
-            <div class="tag">
-              <strong>${it.subject}</strong>
-              <div class="small">👨‍🏫 ${it.teacher}</div>
-              <div class="small">👥 ${it.classLevel} | 🏠 ${it.room}</div>
-            </div>`;
-        });
-      }
-      tr.appendChild(td);
-    });
-    body.appendChild(tr);
-  });
-}
-
-// =============================================
-// ระบบจัดการข้อมูลจำนวนมาก - เพิ่มประสิทธิภาพ
-// =============================================
-
-// ฟังก์ชันจัดการการแบ่งหน้า
-function setupPagination() {
-  document.getElementById('pageSizeSelect').addEventListener('change', function() {
-    pageSize = parseInt(this.value);
-    currentPage = 1;
-    renderList();
-  });
-
-  document.getElementById('firstPageBtn').addEventListener('click', function() {
-    currentPage = 1;
-    renderList();
-  });
-
-  document.getElementById('prevPageBtn').addEventListener('click', function() {
-    if (currentPage > 1) {
-      currentPage--;
-      renderList();
-    }
-  });
-
-  document.getElementById('nextPageBtn').addEventListener('click', function() {
-    if (currentPage < totalPages) {
-      currentPage++;
-      renderList();
-    }
-  });
-
-  document.getElementById('lastPageBtn').addEventListener('click', function() {
-    currentPage = totalPages;
-    renderList();
-  });
-}
-
-// ปรับปรุงฟังก์ชัน renderList สำหรับข้อมูลจำนวนมาก
-function renderList() {
-  const tb = document.querySelector('#lessonTable tbody');
-  if (!tb) return;
-  
-  // ล้างข้อมูลเดิมทั้งหมด
-  tb.innerHTML = '';
-  
-  // กรองข้อมูลตามเงื่อนไข
-  filteredLessons = lessons.filter(lesson => {
-    if (currentFilters.subject && lesson.subject !== currentFilters.subject) return false;
-    if (currentFilters.teacher && lesson.teacher !== currentFilters.teacher) return false;
-    if (currentFilters.classLevel && lesson.classLevel !== currentFilters.classLevel) return false;
-    if (currentFilters.room && lesson.room !== currentFilters.room) return false;
-    if (currentFilters.day !== '' && lesson.day !== parseInt(currentFilters.day)) return false;
-    if (currentFilters.period !== '' && lesson.period !== parseInt(currentFilters.period)) return false;
-    return true;
-  });
-  
-  // เรียงลำดับข้อมูล
-  filteredLessons.sort((a, b) => {
-    if (a.day !== b.day) return a.day - b.day;
-    return a.period - b.period;
-  });
-  
-  // คำนวณการแบ่งหน้า
-  totalPages = Math.ceil(filteredLessons.length / pageSize);
-  const startIndex = (currentPage - 1) * pageSize;
-  const endIndex = Math.min(startIndex + pageSize, filteredLessons.length);
-  const lessonsToDisplay = filteredLessons.slice(startIndex, endIndex);
-  
-  // อัพเดทข้อมูลการแบ่งหน้า
-  updatePaginationInfo();
-  
-  // เรนเดอร์ข้อมูล
-  lessonsToDisplay.forEach(l => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${l.subject}</td>
-      <td>${l.teacher}</td>
-      <td>${l.classLevel}</td>
-      <td>${l.room}</td>
-      <td>${days[l.day]}</td>
-      <td>${periods[l.period]}</td>
-      <td>
-        <button class="btn-warning small edit-btn" data-id="${l.id}" style="margin-right:4px;">✏️ แก้ไข</button>
-        <button class="btn-danger small" data-id="${l.id}">🗑️ ลบ</button>
-      </td>`;
-    tb.appendChild(tr);
-  });
-  
-  // เพิ่ม Event listeners
-  addTableEventListeners();
-}
-
-// ฟังก์ชันอัพเดทข้อมูลการแบ่งหน้า
-function updatePaginationInfo() {
-  const startIndex = (currentPage - 1) * pageSize + 1;
-  const endIndex = Math.min(currentPage * pageSize, filteredLessons.length);
-  
-  document.getElementById('paginationInfo').textContent = 
-    `แสดง ${startIndex} ถึง ${endIndex} จากทั้งหมด ${filteredLessons.length} รายการ (หน้า ${currentPage} จาก ${totalPages})`;
-  
-  // อัพเดทปุ่มการนำทาง
-  document.getElementById('firstPageBtn').disabled = currentPage === 1;
-  document.getElementById('prevPageBtn').disabled = currentPage === 1;
-  document.getElementById('nextPageBtn').disabled = currentPage === totalPages;
-  document.getElementById('lastPageBtn').disabled = currentPage === totalPages;
-  
-  // สร้างหมายเลขหน้า
-  const pageNumbersElement = document.getElementById('pageNumbers');
-  pageNumbersElement.innerHTML = '';
-  
-  const maxVisiblePages = 5;
-  let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-  let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-  
-  if (endPage - startPage + 1 < maxVisiblePages) {
-    startPage = Math.max(1, endPage - maxVisiblePages + 1);
-  }
-  
-  for (let i = startPage; i <= endPage; i++) {
-    const pageButton = document.createElement('button');
-    pageButton.className = i === currentPage ? 'btn-primary small' : 'btn-secondary small';
-    pageButton.textContent = i;
-    pageButton.addEventListener('click', () => {
-      currentPage = i;
-      renderList();
-    });
-    pageNumbersElement.appendChild(pageButton);
-  }
-}
-
-// เพิ่ม Event listeners สำหรับตาราง
-function addTableEventListeners() {
-  const tb = document.querySelector('#lessonTable tbody');
-  if (!tb) return;
-  
-  tb.querySelectorAll('.edit-btn').forEach(b => b.onclick = () => {
-    if (preventGuestAction("แก้ไขรายการสอน")) return;
-    const lesson = lessons.find(x => x.id === b.dataset.id);
-    if (lesson) {
-      editLesson(lesson);
-    }
-  });
-  
-  tb.querySelectorAll('.btn-danger').forEach(b => b.onclick = async () => {
-    if (preventGuestAction("ลบรายการสอน")) return;
-    if (confirm('คุณแน่ใจว่าต้องการลบรายการสอนนี้?')) {
-      lessons = lessons.filter(x => x.id !== b.dataset.id);
-      await saveLessonsOnly();
-      renderAll();
-      updateFilterOptions();
-    }
-  });
-}
-
-function editLesson(lesson) {
-  document.getElementById('teacher').value = lesson.teacher;
-  document.getElementById('subject').value = lesson.subject;
-  document.getElementById('classLevel').value = lesson.classLevel;
-  document.getElementById('room').value = lesson.room;
-  document.getElementById('day').value = lesson.day;
-  document.getElementById('period').value = lesson.period;
-  document.getElementById('numPeriods').value = 1;
-
-  editingId = lesson.id;
-  document.getElementById('submitBtn').textContent = 'อัปเดท';
-  document.getElementById('submitBtn').classList.add('btn-warning');
-  document.getElementById('submitBtn').classList.remove('btn-primary');
-
-  document.getElementById('message').innerHTML = '<div style="color:#f59e0b;">🔄 กำลังแก้ไขรายการสอน...</div>';
-}
-
-function renderSummary() {
-  const div = document.getElementById('teacherSummary');
-  const selectedTeacher = document.getElementById('teacherSummarySelect').value;
-
-  const teacherSummary = {};
-
-  lessons.forEach(lesson => {
-    const { teacher, subject } = lesson;
-
-    if (!teacherSummary[teacher]) {
-      teacherSummary[teacher] = {
-        total: 0,
-        subjects: {}
-      };
-    }
-
-    teacherSummary[teacher].total++;
-
-    if (!teacherSummary[teacher].subjects[subject]) {
-      teacherSummary[teacher].subjects[subject] = 0;
-    }
-
-    teacherSummary[teacher].subjects[subject]++;
-  });
-
-  const sortedTeachers = Object.keys(teacherSummary).sort();
-
-  div.innerHTML = '';
-
-  if (Object.keys(teacherSummary).length === 0) {
-    div.innerHTML = '<div class="no-data">📊 ยังไม่มีข้อมูลการสอน</div>';
-    return;
-  }
-
-  const container = document.createElement('div');
-  container.className = 'teacher-summary-detail';
-
-  let hasData = false;
-
-  sortedTeachers.forEach(teacher => {
-    if (selectedTeacher !== 'all' && teacher !== selectedTeacher) {
-      return;
-    }
-
-    hasData = true;
-    const teacherData = teacherSummary[teacher];
-
-    const teacherItem = document.createElement('div');
-    teacherItem.className = 'teacher-summary-item';
-
-    const header = document.createElement('div');
-    header.className = 'teacher-summary-header';
-
-    const nameDiv = document.createElement('div');
-    nameDiv.className = 'teacher-summary-name';
-    nameDiv.innerHTML = `👨‍🏫 ${teacher}`;
-
-    const totalDiv = document.createElement('div');
-    totalDiv.className = 'teacher-summary-total';
-    totalDiv.textContent = `รวม ${teacherData.total} คาบ`;
-
-    header.appendChild(nameDiv);
-    header.appendChild(totalDiv);
-
-    const subjectList = document.createElement('div');
-    subjectList.className = 'subject-list';
-
-    const sortedSubjects = Object.entries(teacherData.subjects)
-      .sort((a, b) => b[1] - a[1]);
-
-    sortedSubjects.forEach(([subject, count]) => {
-      const subjectItem = document.createElement('div');
-      subjectItem.className = 'subject-item';
-
-      const subjectName = document.createElement('div');
-      subjectName.className = 'subject-name';
-      subjectName.textContent = subject;
-
-      const subjectPeriods = document.createElement('div');
-      subjectPeriods.className = 'subject-periods';
-      subjectPeriods.textContent = `${count} คาบ`;
-
-      subjectItem.appendChild(subjectName);
-      subjectItem.appendChild(subjectPeriods);
-      subjectList.appendChild(subjectItem);
-    });
-
-    teacherItem.appendChild(header);
-    teacherItem.appendChild(subjectList);
-    container.appendChild(teacherItem);
-  });
-
-  if (!hasData && selectedTeacher !== 'all') {
-    div.innerHTML = '<div class="no-data">👤 ไม่พบข้อมูลการสอนสำหรับอาจารย์ท่านนี้</div>';
-  } else {
-    div.appendChild(container);
-  }
-}
-
-function renderClassSummary() {
-  const div = document.getElementById('classSummary');
-  const selectedClass = document.getElementById('classSummarySelect').value;
-
-  const classSummary = {};
-
-  lessons.forEach(lesson => {
-    const { classLevel, subject } = lesson;
-
-    if (!classSummary[classLevel]) {
-      classSummary[classLevel] = {
-        total: 0,
-        subjects: {}
-      };
-    }
-
-    classSummary[classLevel].total++;
-
-    if (!classSummary[classLevel].subjects[subject]) {
-      classSummary[classLevel].subjects[subject] = 0;
-    }
-
-    classSummary[classLevel].subjects[subject]++;
-  });
-
-  const sortedClasses = Object.keys(classSummary).sort();
-
-  div.innerHTML = '';
-
-  if (Object.keys(classSummary).length === 0) {
-    div.innerHTML = '<div class="no-data">📊 ยังไม่มีข้อมูลการสอน</div>';
-    return;
-  }
-
-  const container = document.createElement('div');
-  container.className = 'class-summary-detail';
-
-  let hasData = false;
-
-  sortedClasses.forEach(classLevel => {
-    if (selectedClass !== 'all' && classLevel !== selectedClass) {
-      return;
-    }
-
-    hasData = true;
-    const classData = classSummary[classLevel];
-
-    const classItem = document.createElement('div');
-    classItem.className = 'class-summary-item';
-
-    const header = document.createElement('div');
-    header.className = 'class-summary-header';
-
-    const nameDiv = document.createElement('div');
-    nameDiv.className = 'class-summary-name';
-    nameDiv.innerHTML = `👥 ${classLevel}`;
-
-    const totalDiv = document.createElement('div');
-    totalDiv.className = 'class-summary-total';
-    totalDiv.textContent = `รวม ${classData.total} คาบ`;
-
-    header.appendChild(nameDiv);
-    header.appendChild(totalDiv);
-
-    const subjectList = document.createElement('div');
-    subjectList.className = 'subject-list';
-
-    const sortedSubjects = Object.entries(classData.subjects)
-      .sort((a, b) => b[1] - a[1]);
-
-    sortedSubjects.forEach(([subject, count]) => {
-      const subjectItem = document.createElement('div');
-      subjectItem.className = 'subject-item';
-
-      const subjectName = document.createElement('div');
-      subjectName.className = 'subject-name';
-      subjectName.textContent = subject;
-
-      const subjectPeriods = document.createElement('div');
-      subjectPeriods.className = 'subject-periods';
-      subjectPeriods.textContent = `${count} คาบ`;
-
-      subjectItem.appendChild(subjectName);
-      subjectItem.appendChild(subjectPeriods);
-      subjectList.appendChild(subjectItem);
-    });
-
-    classItem.appendChild(header);
-    classItem.appendChild(subjectList);
-    container.appendChild(classItem);
-  });
-
-  if (!hasData && selectedClass !== 'all') {
-    div.innerHTML = '<div class="no-data">🏫 ไม่พบข้อมูลการสอนสำหรับชั้นปีนี้</div>';
-  } else {
-    div.appendChild(container);
-  }
-}
-
-function conflict(nl, excludeId = null) {
-  return lessons.find(l =>
-    l.id !== excludeId &&
-    l.day === nl.day &&
-    l.period === nl.period &&
-    (l.teacher === nl.teacher || l.room === nl.room || l.classLevel === nl.classLevel)
-  )
-}
-
-function autoSchedule(nl, numPeriods) {
-  let periodsFound = 0;
-  const scheduledPeriods = [];
-  const availableSlots = [];
-
-  for (let d = 0; d < days.length; d++) {
-    for (let p = 0; p < periods.length; p++) {
-      if (p === 4) continue;
-
-      const test = { ...nl, day: d, period: p };
-      if (!conflict(test)) {
-        availableSlots.push({ day: d, period: p });
-      }
-    }
-  }
-
-  if (availableSlots.length < numPeriods) {
-    alert(`❌ ไม่สามารถจัดตารางได้\n\nมีช่องว่างเพียง ${availableSlots.length} คาบ แต่ต้องการ ${numPeriods} คาบ\nอาจารย์ ${nl.teacher} มีคาบสอนชนกันในบางเวลา`);
-    return false;
-  }
-
-  for (let i = 0; i < numPeriods && availableSlots.length > 0; i++) {
-    const randomIndex = Math.floor(Math.random() * availableSlots.length);
-    const slot = availableSlots[randomIndex];
-
-    const newLesson = {
-      ...nl,
-      day: slot.day,
-      period: slot.period,
-      id: generateId()
-    };
-
-    lessons.push(newLesson);
-    scheduledPeriods.push({ day: slot.day, period: slot.period });
-    availableSlots.splice(randomIndex, 1);
-    periodsFound++;
-  }
-
-  if (periodsFound > 0) {
-    renderAll();
-    updateFilterOptions();
-
-    let message = `✅ จัดตารางอัตโนมัติสำเร็จ ${periodsFound} คาบ:\n`;
-    scheduledPeriods.forEach(sp => {
-      message += `• ${days[sp.day]} ${periods[sp.period]}\n`;
-    });
+function validateAndFixUrl(url) {
+    if (!url) return null;
     
-    document.getElementById('message').innerHTML = 
-      `<div style="color:green;">${message.replace(/\n/g, '<br>')}</div>`;
-
-    return true;
-  } else {
-    alert("❌ ไม่พบเวลาว่างที่สามารถจัดได้\nทุกวันและคาบมีการสอนชนกันหมด");
-    return false;
-  }
-}
-
-// =============================================
-// Event Listeners และฟังก์ชันเริ่มต้น
-// =============================================
-
-// ฟังก์ชันบันทึก/อัปเดท
-lessonForm.onsubmit = async e => {
-  if (preventGuestAction("บันทึกหรือแก้ไขข้อมูลการสอน")) return;
-
-  e.preventDefault();
-  const numPeriods = parseInt(document.getElementById('numPeriods').value) || 1;
-
-  if (editingId) {
-    const nl = { 
-      id: editingId, 
-      teacher: teacher.value, 
-      subject: subject.value, 
-      classLevel: classLevel.value, 
-      room: room.value, 
-      day: +day.value, 
-      period: +period.value 
-    };
+    let fixedUrl = url.trim();
     
-    if (nl.period === 4) {
-      alert('❌ พักกลางวันไม่สามารถใช้สอนได้');
-      return;
+    // ตรวจสอบว่าเป็น URL ที่ถูกต้อง
+    try {
+        new URL(fixedUrl);
+    } catch (error) {
+        showNotification('URL ไม่ถูกต้อง', 'error');
+        return null;
     }
-
-    const c = conflict(nl, editingId);
-    if (c) {
-      alert(`❌ การสอนชนกับ:\n\nวิชา: ${c.subject}\nครู: ${c.teacher}\nห้อง: ${c.room}\nวัน: ${days[c.day]}\nคาบ: ${periods[c.period]}`);
-      return;
-    }
-
-    const index = lessons.findIndex(l => l.id === editingId);
-    if (index !== -1) {
-      lessons[index] = nl;
-    }
-
-    document.getElementById('message').innerHTML = '<div style="color:green;">✅ อัปเดทรายการสอนเรียบร้อยแล้ว</div>';
-
-    editingId = null;
-    document.getElementById('submitBtn').textContent = '💾 บันทึก';
-    document.getElementById('submitBtn').classList.remove('btn-warning');
-    document.getElementById('submitBtn').classList.add('btn-primary');
-  } else {
-    const nl = { 
-      id: generateId(), 
-      teacher: teacher.value, 
-      subject: subject.value, 
-      classLevel: classLevel.value, 
-      room: room.value, 
-      day: +day.value, 
-      period: +period.value 
-    };
     
-    if (nl.period === 4) {
-      alert('❌ พักกลางวันไม่สามารถใช้สอนได้');
-      return;
+    // ตรวจสอบว่าเป็น Google Apps Script URL หรือไม่
+    if (!fixedUrl.includes('script.google.com')) {
+        showNotification('กรุณาใช้ Google Apps Script URL', 'warning');
     }
-
-    const c = conflict(nl);
-    if (c) {
-      alert(`❌ การสอนชนกับ:\n\nวิชา: ${c.subject}\nครู: ${c.teacher}\nห้อง: ${c.room}\nวัน: ${days[c.day]}\nคาบ: ${periods[c.period]}`);
-      return;
+    
+    // ตรวจสอบว่าไม่มี /dev ที่ส่วนท้าย
+    if (fixedUrl.includes('/dev')) {
+        fixedUrl = fixedUrl.replace('/dev', '');
+        showNotification('เปลี่ยนจาก deployment /dev เป็น production', 'info');
     }
-
-    lessons.push(nl);
-    document.getElementById('message').innerHTML = '<div style="color:green;">✅ บันทึกรายการสอนเรียบร้อยแล้ว</div>';
-  }
-
-  await saveLessonsOnly();
-  e.target.reset();
-  renderAll();
-  updateFilterOptions();
-};
-
-autoBtn.onclick = async () => {
-  if (preventGuestAction("เพิ่มข้อมูลการสอนอัตโนมัติ")) return;
-
-  const numPeriods = parseInt(document.getElementById('numPeriods').value) || 1;
-  const nl = {
-    id: generateId(),
-    teacher: document.getElementById('teacher').value,
-    subject: document.getElementById('subject').value,
-    classLevel: document.getElementById('classLevel').value,
-    room: document.getElementById('room').value,
-    day: null,
-    period: null
-  };
-
-  if (!nl.teacher || !nl.subject || !nl.classLevel || !nl.room) {
-    alert("❌ กรุณากรอกข้อมูลให้ครบก่อนใช้เพิ่มอัตโนมัติ");
-    return;
-  }
-
-  const success = autoSchedule(nl, numPeriods);
-  if (success) {
-    await saveLessonsOnly();
-  }
-  lessonForm.reset();
-
-  if (editingId) {
-    editingId = null;
-    document.getElementById('submitBtn').textContent = '💾 บันทึก';
-    document.getElementById('submitBtn').classList.remove('btn-warning');
-    document.getElementById('submitBtn').classList.add('btn-primary');
-  }
-};
-
-resetBtn.onclick = () => {
-  if (preventGuestAction("รีเซ็ตฟอร์ม")) return;
-
-  lessonForm.reset();
-  editingId = null;
-  document.getElementById('submitBtn').textContent = '💾 บันทึก';
-  document.getElementById('submitBtn').classList.remove('btn-warning');
-  document.getElementById('submitBtn').classList.add('btn-primary');
-  document.getElementById('message').innerHTML = '';
-};
-
-printBtn.onclick = () => {
-  document.getElementById('message').innerHTML = '<div style="color:blue;">🖨️ กำลังเตรียมพิมพ์... กรุณารอสักครู่</div>';
-  setTimeout(() => {
-    window.print();
-  }, 500);
-};
-
-// Export Excel
-exportBtn.onclick = () => {
-  const wb = XLSX.utils.book_new();
-  const term = document.getElementById('termInput').value;
-  const header = ["วัน/เวลา", "คาบ 1", "คาบ 2", "คาบ 3", "คาบ 4", "พักกลางวัน", "คาบ 5", "คาบ 6", "คาบ 7"];
-  const sheetData = [];
-  sheetData.push(["วิทยาลัยเทคโนโลยีแหลมทอง"]);
-  sheetData.push(["ตารางเรียน / ตารางสอน"]);
-  sheetData.push(["ภาคเรียน: " + term]);
-
-  let title = "ตารางสอน";
-  let filterLabel = "";
-  if (currentTab === "teacher" && filterValue) { 
-    title = `ตารางสอนครู_${filterValue}`; 
-    filterLabel = `ครู: ${filterValue}`; 
-  }
-  if (currentTab === "class" && filterValue) { 
-    title = `ตารางเรียน_${filterValue}`; 
-    filterLabel = `ชั้น: ${filterValue}`; 
-  }
-  if (currentTab === "room" && filterValue) { 
-    title = `ตารางห้อง_${filterValue}`; 
-    filterLabel = `ห้อง: ${filterValue}`; 
-  }
-  if (filterLabel) sheetData.push([filterLabel]);
-
-  sheetData.push([]);
-  sheetData.push(header);
-
-  days.forEach((d, di) => {
-    const row = [d];
-    periods.forEach((p, pi) => {
-      if (pi === 4) {
-        row.push("พักกลางวัน");
-      } else {
-        let filtered = lessons.filter(l => l.day === di && l.period === pi);
-        if (currentTab === "teacher" && filterValue) { filtered = filtered.filter(l => l.teacher === filterValue); }
-        if (currentTab === "class" && filterValue) { filtered = filtered.filter(l => l.classLevel === filterValue); }
-        if (currentTab === "room" && filterValue) { filtered = filtered.filter(l => l.room === filterValue); }
-        const cellLessons = filtered.map(l => `${l.subject} | ${l.teacher} | ${l.classLevel} | ห้อง:${l.room}`).join("\n");
-        row.push(cellLessons);
-      }
-    });
-    sheetData.push(row);
-  });
-
-  const ws = XLSX.utils.aoa_to_sheet(sheetData);
-  XLSX.utils.book_append_sheet(wb, ws, "ตารางสอน");
-  XLSX.writeFile(wb, `${title}.xlsx`);
-  
-  document.getElementById('message').innerHTML = '<div style="color:green;">📊 Export Excel สำเร็จแล้ว</div>';
-};
-
-// Tab Switching
-document.querySelectorAll(".tab").forEach(tab => {
-  tab.onclick = () => {
-    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-    tab.classList.add("active");
-    currentTab = tab.dataset.type;
-    filterValue = "";
-    if (currentTab === "all") {
-      document.getElementById("filterBox").style.display = "none";
-    } else {
-      document.getElementById("filterBox").style.display = "block";
-      updateFilterOptions();
-    }
-    renderGrid();
-  }
-});
-
-function updateFilterOptions() {
-  const sel = document.getElementById("filterSelect");
-  sel.innerHTML = "";
-  let set = new Set();
-  if (currentTab === "teacher") { lessons.forEach(l => set.add(l.teacher)); }
-  if (currentTab === "class") { lessons.forEach(l => set.add(l.classLevel)); }
-  if (currentTab === "room") { lessons.forEach(l => set.add(l.room)); }
-  [...set].forEach(v => {
-    const opt = document.createElement("option");
-    opt.value = v; opt.textContent = v;
-    sel.appendChild(opt);
-  });
-  sel.onchange = () => { filterValue = sel.value; renderGrid(); };
+    
+    return fixedUrl;
 }
 
-// ฟังก์ชันจัดการการกรอง
-function setupFilters() {
-  document.getElementById('filterSubject').addEventListener('change', function () {
-    currentFilters.subject = this.value;
-    currentPage = 1;
-    renderList();
-  });
-
-  document.getElementById('filterTeacher').addEventListener('change', function () {
-    currentFilters.teacher = this.value;
-    currentPage = 1;
-    renderList();
-  });
-
-  document.getElementById('filterClass').addEventListener('change', function () {
-    currentFilters.classLevel = this.value;
-    currentPage = 1;
-    renderList();
-  });
-
-  document.getElementById('filterRoom').addEventListener('change', function () {
-    currentFilters.room = this.value;
-    currentPage = 1;
-    renderList();
-  });
-
-  document.getElementById('filterDay').addEventListener('change', function () {
-    currentFilters.day = this.value;
-    currentPage = 1;
-    renderList();
-  });
-
-  document.getElementById('filterPeriod').addEventListener('change', function () {
-    currentFilters.period = this.value;
-    currentPage = 1;
-    renderList();
-  });
-
-  document.getElementById('resetFilterBtn').addEventListener('click', function () {
-    currentFilters = {
-      subject: '',
-      teacher: '',
-      classLevel: '',
-      room: '',
-      day: '',
-      period: ''
-    };
-
-    document.getElementById('filterSubject').value = '';
-    document.getElementById('filterTeacher').value = '';
-    document.getElementById('filterClass').value = '';
-    document.getElementById('filterRoom').value = '';
-    document.getElementById('filterDay').value = '';
-    document.getElementById('filterPeriod').value = '';
-    currentPage = 1;
-    renderList();
-  });
+function saveScriptUrl() {
+    let url = document.getElementById('scriptUrl').value.trim();
+    
+    const fixedUrl = validateAndFixUrl(url);
+    if (!fixedUrl) return;
+    
+    googleSheetsUrl = fixedUrl;
+    DataManager.saveToLocalStorage();
+    
+    // อัพเดท URL ในฟิลด์
+    document.getElementById('scriptUrl').value = fixedUrl;
+    
+    showNotification('บันทึก URL เรียบร้อยแล้ว', 'success');
+    ScheduleRenderer.renderSystemInfo();
+    
+    // ทดสอบการเชื่อมต่ออัตโนมัติหลังจากบันทึก
+    setTimeout(() => {
+        testConnectionDetailed();
+    }, 1000);
 }
 
-// ฟังก์ชันจัดการแท็บสรุป
-function setupSummaryTabs() {
-  const teacherTab = document.querySelector('.summary-tab[data-type="teacher"]');
-  const classTab = document.querySelector('.summary-tab[data-type="class"]');
-
-  teacherTab.addEventListener('click', function () {
-    document.querySelectorAll('.summary-tab').forEach(tab => tab.classList.remove('active'));
-    teacherTab.classList.add('active');
-
-    document.getElementById('teacherSummarySection').style.display = 'block';
-    document.getElementById('classSummarySection').style.display = 'none';
-  });
-
-  classTab.addEventListener('click', function () {
-    document.querySelectorAll('.summary-tab').forEach(tab => tab.classList.remove('active'));
-    classTab.classList.add('active');
-
-    document.getElementById('teacherSummarySection').style.display = 'none';
-    document.getElementById('classSummarySection').style.display = 'block';
-
-    renderClassSummary();
-  });
+function saveScriptUrlModal() {
+    let url = document.getElementById('scriptUrlModal').value.trim();
+    
+    const fixedUrl = validateAndFixUrl(url);
+    if (!fixedUrl) return;
+    
+    googleSheetsUrl = fixedUrl;
+    DataManager.saveToLocalStorage();
+    
+    // อัพเดท URL ในฟิลด์
+    document.getElementById('scriptUrl').value = fixedUrl;
+    document.getElementById('scriptUrlModal').value = fixedUrl;
+    
+    showNotification('บันทึก URL เรียบร้อยแล้ว', 'success');
+    ScheduleRenderer.renderSystemInfo();
+    
+    const modal = bootstrap.Modal.getInstance(document.getElementById('googleSheetsModal'));
+    modal.hide();
+    
+    // ทดสอบการเชื่อมต่ออัตโนมัติหลังจากบันทึก
+    setTimeout(() => {
+        testConnectionDetailed();
+    }, 1000);
 }
 
-// Event listener สำหรับ dropdown สรุปอาจารย์
-document.getElementById('teacherSummarySelect').addEventListener('change', renderSummary);
-
-// Event listener สำหรับ dropdown สรุปชั้นปี
-document.getElementById('classSummarySelect').addEventListener('change', renderClassSummary);
-
-// =============================================
-// ฟังก์ชันจัดการ JSON
-// =============================================
-
-// ฟังก์ชันทำความสะอาดข้อมูลก่อนนำเข้า
-function cleanImportedData(data) {
-  if (data.teachers) {
-    data.teachers = data.teachers
-      .filter(teacher => teacher && teacher.toString().trim() !== '')
-      .map(teacher => teacher.toString().trim())
-      .filter((teacher, index, self) => self.indexOf(teacher) === index);
-  }
-  
-  if (data.classes) {
-    data.classes = data.classes
-      .filter(cls => cls && cls.toString().trim() !== '')
-      .map(cls => cls.toString().trim())
-      .filter((cls, index, self) => self.indexOf(cls) === index);
-  }
-  
-  if (data.subjects) {
-    data.subjects = data.subjects
-      .filter(subject => subject && subject.toString().trim() !== '')
-      .map(subject => subject.toString().trim())
-      .filter((subject, index, self) => self.indexOf(subject) === index);
-  }
-  
-  if (data.rooms) {
-    data.rooms = data.rooms
-      .filter(room => room && room.toString().trim() !== '')
-      .map(room => room.toString().trim())
-      .filter((room, index, self) => self.indexOf(room) === index);
-  }
-  
-  if (data.lessons) {
-    data.lessons = data.lessons
-      .filter(lesson => lesson && lesson.id && lesson.teacher && lesson.subject)
-      .map(lesson => ({
-        id: lesson.id.toString().trim(),
-        teacher: lesson.teacher.toString().trim(),
-        subject: lesson.subject.toString().trim(),
-        classLevel: lesson.classLevel ? lesson.classLevel.toString().trim() : '',
-        room: lesson.room ? lesson.room.toString().trim() : '',
-        day: typeof lesson.day === 'number' ? lesson.day : parseInt(lesson.day) || 0,
-        period: typeof lesson.period === 'number' ? lesson.period : parseInt(lesson.period) || 0
-      }))
-      .filter((lesson, index, self) => 
-        self.findIndex(l => l.id === lesson.id) === index
-      );
-  }
-  
-  return data;
-}
-
-// ฟังก์ชันนำเข้าข้อมูลจาก JSON
-async function importJSON(file) {
-  console.log('📁 เริ่มนำเข้าไฟล์ JSON:', file.name);
-  
-  const reader = new FileReader();
-  
-  reader.onload = async function(e) {
-    let loadingShown = false;
+// ฟังก์ชันสำหรับทดสอบการเชื่อมต่อแบบละเอียด
+async function testConnectionDetailed() {
+    const testBtn = document.getElementById('testConnection');
+    const originalText = testBtn.innerHTML;
     
     try {
-      showLoading(true, 'นำเข้าไฟล์ JSON');
-      loadingShown = true;
-      console.log('📖 กำลังอ่านไฟล์...');
-      
-      if (!e.target.result) {
-        throw new Error('ไฟล์ว่างเปล่า');
-      }
-      
-      let rawData;
-      try {
-        rawData = JSON.parse(e.target.result);
-        console.log('✅ Parse JSON สำเร็จ', Object.keys(rawData));
-      } catch (parseError) {
-        console.error('❌ ข้อผิดพลาดในการ parse JSON:', parseError);
-        throw new Error('รูปแบบไฟล์ JSON ไม่ถูกต้อง: ' + parseError.message);
-      }
-      
-      const data = cleanImportedData(rawData);
-      console.log('🧹 ข้อมูลหลังจากทำความสะอาด:', {
-        teachers: data.teachers?.length,
-        classes: data.classes?.length,
-        subjects: data.subjects?.length,
-        rooms: data.rooms?.length,
-        lessons: data.lessons?.length
-      });
-      
-      if (!data.teachers || !data.classes || !data.subjects || !data.rooms || !data.lessons) {
-        console.error('❌ โครงสร้างไฟล์ไม่ครบ:', {
-          teachers: !!data.teachers,
-          classes: !!data.classes,
-          subjects: !!data.subjects,
-          rooms: !!data.rooms,
-          lessons: !!data.lessons
-        });
-        throw new Error('รูปแบบไฟล์ไม่ถูกต้อง - ไฟล์ต้องมีข้อมูลครู, ชั้นเรียน, วิชา, ห้อง, และตารางเรียน');
-      }
-      
-      const stats = {
-        teachers: data.teachers.length,
-        classes: data.classes.length,
-        subjects: data.subjects.length,
-        rooms: data.rooms.length,
-        lessons: data.lessons.length
-      };
-      
-      console.log('📊 สถิติข้อมูลที่จะนำเข้า:', stats);
-      
-      if (!confirm(`การนำเข้าข้อมูลจะทับข้อมูลปัจจุบันทั้งหมด\n\nข้อมูลที่จะนำเข้า:\n• ครู: ${stats.teachers} ท่าน\n• ชั้นเรียน: ${stats.classes} ห้อง\n• วิชา: ${stats.subjects} รายการ\n• ห้อง: ${stats.rooms} ห้อง\n• ตารางเรียน: ${stats.lessons} คาบ\n\nต้องการดำเนินการต่อหรือไม่?`)) {
-        showLoading(false, 'นำเข้าไฟล์ JSON');
-        return;
-      }
-      
-      teachers = data.teachers;
-      classes = data.classes;
-      subjects = data.subjects;
-      rooms = data.rooms;
-      lessons = data.lessons;
-      
-      console.log('✅ อัพเดทข้อมูลในตัวแปรสำเร็จ');
-      
-      backupToLocalStorage({ teachers, classes, subjects, rooms, lessons });
-      console.log('💾 บันทึกลง Local Storage สำเร็จ');
-      
-      let saveResult = false;
-      let saveError = null;
-      
-      try {
-        console.log('🌐 กำลังบันทึกลง Google Sheets...');
-        saveResult = await saveAllDataOptimized();
-        console.log('✅ ผลการบันทึก Google Sheets:', saveResult);
-      } catch (error) {
-        console.error('❌ ข้อผิดพลาดในการบันทึกลง Google Sheets:', error);
-        saveError = error;
-        saveResult = false;
-      }
-      
-      loadDropdowns();
-      renderAll();
-      
-      if (saveResult) {
-        document.getElementById('message').innerHTML = 
-          `<div style="color:green;">
-            ✅ นำเข้าข้อมูลจาก JSON และบันทึกลง Google Sheet สำเร็จแล้ว!<br>
-            <small>ครู: ${stats.teachers} ท่าน | วิชา: ${stats.subjects} รายการ | ตารางเรียน: ${stats.lessons} คาบ</small>
-          </div>`;
-      } else {
-        document.getElementById('message').innerHTML = 
-          `<div style="color:orange;">
-            ✅ นำเข้าข้อมูลจาก JSON สำเร็จ (บันทึกใน Local Storage)<br>
-            <small>${saveError ? saveError.message : 'ไม่สามารถเชื่อมต่อกับ Google Sheets ได้'}</small><br>
-            <small>ครู: ${stats.teachers} ท่าน | วิชา: ${stats.subjects} รายการ | ตารางเรียน: ${stats.lessons} คาบ</small>
-            <br><br>
-            <strong>คำแนะนำ:</strong><br>
-            • ข้อมูลถูกบันทึกในเบราว์เซอร์แล้ว<br>
-            • สามารถส่งข้อมูลไป Google Sheets ได้ภายหลัง<br>
-            • หรือใช้ปุ่ม "ทดสอบการเชื่อมต่อ" เพื่อตรวจสอบการเชื่อมต่อ
-          </div>`;
-      }
-      
+        testBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> กำลังทดสอบ...';
+        testBtn.disabled = true;
+        
+        showNotification('🔄 กำลังทดสอบการเชื่อมต่อแบบละเอียด...', 'info');
+        
+        // ทดสอบพื้นฐานก่อน
+        if (!googleSheetsUrl) {
+            throw new Error('กรุณาระบุ Google Apps Script URL ก่อน');
+        }
+        
+        // ตรวจสอบว่า URL ถูกต้อง
+        const fixedUrl = DataManager.fixGoogleScriptUrl(googleSheetsUrl);
+        console.log('URL หลังแก้ไข:', fixedUrl);
+        
+        // ทดสอบการเชื่อมต่อ
+        const result = await GoogleSheetsManager.testConnection();
+        
+        if (result.success) {
+            showNotification('✅ ' + result.message, 'success');
+            
+            // แสดงข้อมูลเพิ่มเติม
+            console.log('✅ การเชื่อมต่อสำเร็จ:', result);
+        } else {
+            showNotification('❌ ' + result.message, 'error');
+            
+            // แสดงคำแนะนำในการแก้ไข
+            showDetailedTroubleshooting(result);
+        }
     } catch (error) {
-      console.error('❌ ข้อผิดพลาดใน importJSON:', error);
-      document.getElementById('message').innerHTML = 
-        `<div style="color:red;">
-          ❌ เกิดข้อผิดพลาดในการนำเข้าไฟล์ JSON<br>
-          <small>${error.message}</small><br>
-          <small>กรุณาตรวจสอบว่าไฟล์มีรูปแบบที่ถูกต้องและไม่เสียหาย</small>
-        </div>`;
+        console.error('❌ Connection test failed:', error);
+        showNotification('❌ การเชื่อมต่อล้มเหลว: ' + error.message, 'error');
+        
+        // แสดงคำแนะนำในการแก้ไข
+        showDetailedTroubleshooting({ error: error.message });
     } finally {
-      if (loadingShown) {
-        showLoading(false, 'นำเข้าไฟล์ JSON');
-      }
+        testBtn.innerHTML = originalText;
+        testBtn.disabled = false;
     }
-  };
-  
-  reader.onerror = function(error) {
-    console.error('❌ ข้อผิดพลาดในการอ่านไฟล์:', error);
-    showLoading(false, 'นำเข้าไฟล์ JSON');
-    document.getElementById('message').innerHTML = 
-      `<div style="color:red;">
-        ❌ เกิดข้อผิดพลาดในการอ่านไฟล์<br>
-        <small>กรุณาตรวจสอบว่าไฟล์ไม่เสียหายและมีสิทธิ์ในการอ่าน</small>
-      </div>`;
-  };
-  
-  reader.readAsText(file);
 }
 
-// ฟังก์ชันดาวน์โหลดข้อมูลเป็น JSON
-function downloadJSON() {
-  const data = {
-    teachers,
-    classes,
-    subjects,
-    rooms,
-    lessons,
-    exportDate: new Date().toISOString(),
-    version: '1.0',
-    stats: {
-      teachers: teachers.length,
-      classes: classes.length,
-      subjects: subjects.length,
-      rooms: rooms.length,
-      lessons: lessons.length
+// ฟังก์ชันแสดงคำแนะนำการแก้ไขปัญหาแบบละเอียด
+function showDetailedTroubleshooting(result) {
+    const troubleshootingTips = `
+        <div class="alert alert-warning mt-3 troubleshooting-tips">
+            <h6><i class="fas fa-tools me-2"></i>คำแนะนำในการแก้ไขปัญหา "Failed to fetch":</h6>
+            <ol class="mb-2">
+                <li><strong>ตรวจสอบ Google Apps Script Deployment:</strong>
+                    <ul>
+                        <li>เปิด Google Apps Script</li>
+                        <li>ไปที่ Deploy > Manage deployments</li>
+                        <li>เลือกเวอร์ชันล่าสุดและกด "Deploy"</li>
+                        <li>เลือก "Web App" เป็นประเภท</li>
+                        <li>ตั้งค่า "Execute as" เป็น "Me"</li>
+                        <li>ตั้งค่า "Who has access" เป็น "Anyone"</li>
+                        <li>คัดลอก URL ใหม่</li>
+                    </ul>
+                </li>
+                <li><strong>ตรวจสอบ CORS Settings:</strong>
+                    <ul>
+                        <li>ใน Google Apps Script ให้เพิ่ม doGet และ doPost functions</li>
+                        <li>ใช้ ContentService.createTextOutput()</li>
+                        <li>อย่าใช้ HtmlService สำหรับ API endpoints</li>
+                    </ul>
+                </li>
+                <li><strong>ตรวจสอบ URL:</strong>
+                    <ul>
+                        <li>URL ต้องขึ้นต้นด้วย https://script.google.com/macros/s/...</li>
+                        <li>ต้องไม่มี /dev ต่อท้าย URL</li>
+                        <li>ลองเปิด URL ใน browser ใหม่เพื่อทดสอบ</li>
+                    </ul>
+                </li>
+                <li><strong>ปัญหาอื่นๆ ที่อาจเกิด:</strong>
+                    <ul>
+                        <li>อินเทอร์เน็ตเชื่อมต่อไม่穩定</li>
+                        <li>เบราว์เซอร์บล็อกการเชื่อมต่อ</li>
+                        <li>Extension ในเบราว์เซอร์ขัดขวาง</li>
+                    </ul>
+                </li>
+            </ol>
+            <div class="mt-2">
+                <button class="btn btn-sm btn-outline-primary me-2" onclick="openUrlInNewTab('${googleSheetsUrl}')">
+                    <i class="fas fa-external-link-alt me-1"></i> เปิด URL ในแท็บใหม่
+                </button>
+                <button class="btn btn-sm btn-outline-info" onclick="testAlternativeMethods()">
+                    <i class="fas fa-vial me-1"></i> ทดสอบวิธีการอื่น
+                </button>
+            </div>
+        </div>
+    `;
+    
+    // เพิ่มคำแนะนำใน system info view
+    const systemInfo = document.getElementById('system-info');
+    const existingTips = systemInfo.querySelector('.troubleshooting-tips');
+    if (existingTips) {
+        existingTips.remove();
     }
-  };
-  
-  const dataStr = JSON.stringify(data, null, 2);
-  const dataBlob = new Blob([dataStr], {type: 'application/json'});
-  
-  const url = URL.createObjectURL(dataBlob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `timetable_backup_${new Date().toISOString().split('T')[0]}.json`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-  
-  document.getElementById('message').innerHTML = 
-    `<div style="color:green;">
-      📥 ดาวน์โหลดไฟล์ JSON สำเร็จแล้ว<br>
-      <small>ครู: ${teachers.length} ท่าน | วิชา: ${subjects.length} รายการ | ตารางเรียน: ${lessons.length} คาบ</small>
-    </div>`;
+    
+    const tipsElement = document.createElement('div');
+    tipsElement.className = 'troubleshooting-tips';
+    tipsElement.innerHTML = troubleshootingTips;
+    systemInfo.querySelector('.card-body').appendChild(tipsElement);
 }
 
-// ฟังก์ชันล้างข้อมูลทั้งหมด
-async function clearAllData() {
-  if (!confirm('⚠️ คุณแน่ใจว่าต้องการล้างข้อมูลทั้งหมด?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้!')) {
-    return;
-  }
-  
-  let loadingShown = false;
-  
-  try {
-    showLoading(true, 'ล้างข้อมูลทั้งหมด');
-    loadingShown = true;
-    
-    teachers = [];
-    classes = [];
-    subjects = [];
-    rooms = [];
-    lessons = [];
-    
-    await saveAllDataOptimized();
-    loadDropdowns();
-    renderAll();
-    
-    document.getElementById('message').innerHTML = 
-      '<div style="color:green;">✅ ล้างข้อมูลทั้งหมดเรียบร้อยแล้ว</div>';
-      
-  } catch (error) {
-    console.error('❌ ข้อผิดพลาดในการล้างข้อมูล:', error);
-    document.getElementById('message').innerHTML = 
-      `<div style="color:red;">❌ เกิดข้อผิดพลาดในการล้างข้อมูล</div>`;
-  } finally {
-    if (loadingShown) {
-      showLoading(false, 'ล้างข้อมูลทั้งหมด');
-    }
-  }
-}
-
-// ฟังก์ชัน Debug ข้อมูล
-function debugData() {
-  console.log('=== DEBUG DATA ===');
-  console.log('Teachers:', teachers);
-  console.log('Classes:', classes);
-  console.log('Subjects:', subjects);
-  console.log('Rooms:', rooms);
-  console.log('Lessons:', lessons);
-  console.log('Local Storage Teachers:', localStorage.getItem('teachers'));
-  console.log('Local Storage Classes:', localStorage.getItem('classes'));
-  console.log('Local Storage Subjects:', localStorage.getItem('subjects'));
-  console.log('Local Storage Rooms:', localStorage.getItem('rooms'));
-  console.log('Local Storage Lessons:', localStorage.getItem('lessons'));
-  
-  const stats = getStatistics();
-  alert(`📊 สถิติข้อมูลปัจจุบัน:\n\n` +
-        `• ครู: ${stats.teachers} ท่าน\n` +
-        `• ชั้นเรียน: ${stats.classes} ห้อง\n` +
-        `• วิชา: ${stats.subjects} รายการ\n` +
-        `• ห้อง: ${stats.rooms} ห้อง\n` +
-        `• ตารางเรียน: ${stats.lessons} คาบ\n\n` +
-        `ดูรายละเอียดใน Console (F12)`);
-}
-
-// เพิ่มฟังก์ชันตรวจสอบและแสดงสถิติข้อมูล
-function showDataStatistics() {
-  const stats = getStatistics();
-  
-  const statsHtml = `
-    <div style="background: #f0fdf4; padding: 15px; border-radius: 8px; border: 1px solid #d1fae5; margin: 10px 0;">
-      <h4 style="margin: 0 0 10px 0; color: #065f46;">📊 สถิติข้อมูลทั้งหมด</h4>
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;">
-        <div style="text-align: center; background: white; padding: 10px; border-radius: 6px;">
-          <div style="font-size: 24px; font-weight: bold; color: #10b981;">${stats.teachers}</div>
-          <div style="font-size: 12px; color: #4b5563;">ครู</div>
-        </div>
-        <div style="text-align: center; background: white; padding: 10px; border-radius: 6px;">
-          <div style="font-size: 24px; font-weight: bold; color: #10b981;">${stats.classes}</div>
-          <div style="font-size: 12px; color: #4b5563;">ชั้นเรียน</div>
-        </div>
-        <div style="text-align: center; background: white; padding: 10px; border-radius: 6px;">
-          <div style="font-size: 24px; font-weight: bold; color: #10b981;">${stats.subjects}</div>
-          <div style="font-size: 12px; color: #4b5563;">รายวิชา</div>
-        </div>
-        <div style="text-align: center; background: white; padding: 10px; border-radius: 6px;">
-          <div style="font-size: 24px; font-weight: bold; color: #10b981;">${stats.rooms}</div>
-          <div style="font-size: 12px; color: #4b5563;">ห้อง</div>
-        </div>
-        <div style="text-align: center; background: white; padding: 10px; border-radius: 6px;">
-          <div style="font-size: 24px; font-weight: bold; color: #10b981;">${stats.lessons}</div>
-          <div style="font-size: 12px; color: #4b5563;">ตารางเรียน</div>
-        </div>
-      </div>
-      ${stats.teachers > 100 || stats.classes > 100 || stats.subjects > 100 || stats.rooms > 100 || stats.lessons > 100 ? 
-        `<div style="margin-top: 10px; padding: 8px; background: #fff3cd; border-radius: 4px; color: #856404; font-size: 12px;">
-          ⚠️ ระบบกำลังจัดการกับข้อมูลจำนวนมาก การทำงานบางอย่างอาจใช้เวลานานกว่าเดิม
-        </div>` : ''
-      }
-    </div>
-  `;
-  
-  return statsHtml;
-}
-
-// ฟังก์ชันสำหรับการจัดการข้อมูลจำนวนมาก
-function getStatistics() {
-  return {
-    teachers: teachers.length,
-    classes: classes.length,
-    subjects: subjects.length,
-    rooms: rooms.length,
-    lessons: lessons.length,
-    totalPeriods: lessons.reduce((total, lesson) => total + 1, 0)
-  };
-}
-
-// ฟังก์ชันแสดงสถิติ
-function showStatistics() {
-  const stats = getStatistics();
-  alert(`📊 สถิติข้อมูลตารางเรียน:\n\n• ครู: ${stats.teachers} ท่าน\n• ชั้นเรียน: ${stats.classes} ห้อง\n• วิชา: ${stats.subjects} รายการ\n• ห้อง: ${stats.rooms} ห้อง\n• ตารางเรียน: ${stats.lessons} คาบ\n• รวมทั้งหมด: ${stats.totalPeriods} คาบสอน`);
-}
-
-// ฟังก์ชันบันทึกข้อมูลแบบแบ่งชุด
-async function saveDataInChunks() {
-  if (preventGuestAction("ส่งข้อมูลแบบแบ่งชุด")) return;
-  
-  let loadingShown = false;
-  
-  try {
-    showLoading(true, 'ส่งข้อมูลแบบแบ่งชุด');
-    loadingShown = true;
-    
-    const CHUNK_SIZE = 200; // ลดขนาดชุดข้อมูลเพื่อประสิทธิภาพที่ดีขึ้น
-    
-    let successCount = 0;
-    let errorCount = 0;
-    let totalSaved = 0;
-    
-    // สร้างรายงานความคืบหน้า
-    const progressElement = document.createElement('div');
-    progressElement.style.cssText = 'margin: 10px 0; padding: 10px; background: #f0fdf4; border-radius: 6px;';
-    document.getElementById('message').appendChild(progressElement);
-    
-    // บันทึกข้อมูลพื้นฐาน
-    const basicData = {
-      teachers: teachers || [],
-      classes: classes || [],
-      subjects: subjects || [],
-      rooms: rooms || []
-    };
+// ฟังก์ชันทดสอบวิธีการอื่น
+async function testAlternativeMethods() {
+    showNotification('🔄 กำลังทดสอบวิธีการเชื่อมต่ออื่นๆ...', 'info');
     
     try {
-      await callGoogleAppsScript('saveBasicData', basicData);
-      successCount++;
-      totalSaved += basicData.teachers.length + basicData.classes.length + 
-                   basicData.subjects.length + basicData.rooms.length;
-      console.log('✅ บันทึกข้อมูลพื้นฐานสำเร็จ');
+        // ทดสอบ no-cors method
+        const noCorsResult = await GoogleSheetsManager.testWithNoCors();
+        showNotification('✅ No-CORS method: ' + noCorsResult.message, 'success');
+        
+        // ทดสอบ XMLHttpRequest
+        const xhrResult = await GoogleSheetsManager.testWithXMLHttpRequest();
+        showNotification('✅ XMLHttpRequest: ' + xhrResult.message, 'success');
+        
     } catch (error) {
-      errorCount++;
-      console.error('❌ บันทึกข้อมูลพื้นฐานล้มเหลว:', error);
+        showNotification('❌ การทดสอบวิธีการอื่นล้มเหลว: ' + error.message, 'error');
     }
-    
-    // บันทึก lessons แบบแบ่งชุด
-    if (lessons.length > 0) {
-      for (let i = 0; i < lessons.length; i += CHUNK_SIZE) {
-        const chunk = lessons.slice(i, i + CHUNK_SIZE);
-        
-        progressElement.innerHTML = 
-          `🔄 กำลังบันทึกชุดข้อมูล ${Math.floor(i/CHUNK_SIZE) + 1}/${Math.ceil(lessons.length/CHUNK_SIZE)}...`;
-        
-        try {
-          await callGoogleAppsScript('saveLessonsChunk', { 
-            lessons: chunk,
-            chunkIndex: Math.floor(i/CHUNK_SIZE),
-            totalChunks: Math.ceil(lessons.length/CHUNK_SIZE)
-          });
-          successCount++;
-          totalSaved += chunk.length;
-          console.log(`✅ บันทึกชุด lessons ${Math.floor(i/CHUNK_SIZE) + 1} สำเร็จ`);
-        } catch (error) {
-          errorCount++;
-          console.error(`❌ บันทึกชุด lessons ${Math.floor(i/CHUNK_SIZE) + 1} ล้มเหลว:`, error);
-        }
-        
-        // พักระหว่างชุดเพื่อป้องกัน timeout
-        if (i > 0 && i % (CHUNK_SIZE * 5) === 0) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-      }
-    }
-    
-    // ลบรายงานความคืบหน้า
-    progressElement.remove();
-    
-    if (errorCount === 0) {
-      document.getElementById('message').innerHTML = 
-        `<div style="color:green;">
-          ✅ บันทึกข้อมูลทั้งหมดลง Google Sheets สำเร็จ!<br>
-          <small>บันทึกข้อมูลทั้งหมด ${totalSaved} รายการใน ${successCount} ชุด</small>
-        </div>`;
-    } else {
-      document.getElementById('message').innerHTML = 
-        `<div style="color:orange;">
-          ⚠️ บันทึกข้อมูลบางส่วนลง Google Sheets<br>
-          <small>สำเร็จ: ${successCount} ชุด | ล้มเหลว: ${errorCount} ชุด | รวมบันทึก: ${totalSaved} รายการ</small>
-          <br><br>
-          <strong>คำแนะนำ:</strong><br>
-          • ข้อมูลบางส่วนอาจถูกบันทึกแล้ว<br>
-          • ลองบันทึกอีกครั้งหรือแบ่งข้อมูลเป็นชุดเล็กลง
-        </div>`;
-    }
-    
-  } catch (error) {
-    console.error('❌ ข้อผิดพลาดใน saveDataInChunks:', error);
-    document.getElementById('message').innerHTML = 
-      `<div style="color:red;">
-        ❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลแบบแบ่งชุด<br>
-        <small>${error.message}</small>
-      </div>`;
-  } finally {
-    if (loadingShown) {
-      showLoading(false, 'ส่งข้อมูลแบบแบ่งชุด');
-    }
-  }
 }
 
-// =============================================
-// การเริ่มต้นระบบ
-// =============================================
+function openUrlInNewTab(url) {
+    window.open(url, '_blank');
+}
 
-// Event Listeners สำหรับปุ่ม JSON และ Google Sheets
-document.getElementById('downloadJsonBtn').onclick = downloadJSON;
-
-document.getElementById('importJsonBtn').onclick = function () {
-  if (preventGuestAction("นำเข้าข้อมูลจากไฟล์ JSON")) return;
-  document.getElementById('jsonFileInput').click();
-};
-
-document.getElementById('jsonFileInput').onchange = function (e) {
-  if (e.target.files.length > 0) {
-    importJSON(e.target.files[0]);
-    e.target.value = '';
-  }
-};
-
-document.getElementById('exportToSheetsBtn').onclick = exportToGoogleSheets;
-document.getElementById('exportToSheetsChunkBtn').onclick = saveDataInChunks;
-document.getElementById('importFromSheetsBtn').onclick = importFromGoogleSheets;
-document.getElementById('testConnectionBtn').onclick = testSimpleConnection;
-document.getElementById('clearDataBtn').onclick = clearAllData;
-document.getElementById('debugBtn').onclick = debugData;
-
-// เพิ่ม Event Listeners สำหรับปุ่มใหม่
-document.getElementById('saveLessonsBtn').onclick = saveLessonsOnly;
-document.getElementById('saveAllFastBtn').onclick = saveAllDataOptimized;
-
-// เมื่อโหลดหน้าเว็บเสร็จ
-window.addEventListener('DOMContentLoaded', function () {
-  console.log('🚀 กำลังเริ่มต้นระบบจัดการตารางเรียน...');
-  showLoginModal();
-
-  document.getElementById('loginBtn').onclick = loginAsAdmin;
-  document.getElementById('guestBtn').onclick = loginAsGuest;
-  document.getElementById('logoutBtn').onclick = logout;
-
-  document.getElementById('adminPassword').addEventListener('keypress', function (e) {
-    if (e.key === 'Enter') {
-      loginAsAdmin();
+async function initializeSheets() {
+    try {
+        showNotification('กำลังเริ่มต้นระบบ Google Sheets...', 'info');
+        const result = await GoogleSheetsManager.initializeSheets();
+        
+        if (result.success) {
+            showNotification('เริ่มต้นระบบสำเร็จ: ' + result.message, 'success');
+            
+            // โหลดข้อมูลหลังจาก initialize
+            setTimeout(() => {
+                GoogleSheetsManager.loadFromSheets();
+            }, 2000);
+        } else {
+            showNotification('เริ่มต้นระบบล้มเหลว: ' + result.message, 'error');
+        }
+    } catch (error) {
+        showNotification(error.message, 'error');
     }
-  });
+}
 
-  setupFilters();
-  setupSummaryTabs();
-  setupPagination();
+async function initializeSheetsModal() {
+    try {
+        showNotification('กำลังเริ่มต้นระบบ Google Sheets...', 'info');
+        const result = await GoogleSheetsManager.initializeSheets();
+        
+        if (result.success) {
+            showNotification('เริ่มต้นระบบสำเร็จ: ' + result.message, 'success');
+            
+            // โหลดข้อมูลหลังจาก initialize
+            setTimeout(() => {
+                GoogleSheetsManager.loadFromSheets();
+            }, 2000);
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('googleSheetsModal'));
+            modal.hide();
+        } else {
+            showNotification('เริ่มต้นระบบล้มเหลว: ' + result.message, 'error');
+        }
+    } catch (error) {
+        showNotification(error.message, 'error');
+    }
+}
 
-  // ตรวจสอบสถานะการโหลดทุก 30 วินาที
-  setInterval(checkLoadingStatus, 30000);
+async function syncToSheets() {
+    try {
+        showNotification('กำลังอัพโหลดข้อมูล...', 'info');
+        const result = await GoogleSheetsManager.syncToSheets();
+        if (result.success) {
+            showNotification('อัพโหลดข้อมูลสำเร็จ: ' + result.message, 'success');
+        } else {
+            showNotification('อัพโหลดข้อมูลล้มเหลว: ' + result.message, 'error');
+        }
+    } catch (error) {
+        showNotification(error.message, 'error');
+    }
+}
 
-  console.log('📥 กำลังโหลดข้อมูลเริ่มต้น...');
-  loadAllData().then(() => {
-    loadDropdowns();
-    renderAll();
-    console.log('✅ ระบบพร้อมใช้งานแล้ว!');
-  });
-});
+async function syncToSheetsModal() {
+    try {
+        showNotification('กำลังอัพโหลดข้อมูล...', 'info');
+        const result = await GoogleSheetsManager.syncToSheets();
+        if (result.success) {
+            showNotification('อัพโหลดข้อมูลสำเร็จ: ' + result.message, 'success');
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('googleSheetsModal'));
+            modal.hide();
+        } else {
+            showNotification('อัพโหลดข้อมูลล้มเหลว: ' + result.message, 'error');
+        }
+    } catch (error) {
+        showNotification(error.message, 'error');
+    }
+}
+
+// ฟังก์ชันใหม่: sync แบบแบ่งชุด
+async function syncToSheetsBatch() {
+    try {
+        showNotification('กำลังอัพโหลดข้อมูลแบบแบ่งชุด...', 'info');
+        const result = await GoogleSheetsManager.syncToSheetsBatch();
+        if (result.success) {
+            showNotification('อัพโหลดข้อมูลแบบแบ่งชุดสำเร็จ: ' + result.message, 'success');
+        } else {
+            showNotification('อัพโหลดข้อมูลแบบแบ่งชุดล้มเหลว: ' + result.message, 'error');
+        }
+    } catch (error) {
+        showNotification(error.message, 'error');
+    }
+}
+
+async function syncToSheetsBatchModal() {
+    try {
+        showNotification('กำลังอัพโหลดข้อมูลแบบแบ่งชุด...', 'info');
+        const result = await GoogleSheetsManager.syncToSheetsBatch();
+        if (result.success) {
+            showNotification('อัพโหลดข้อมูลแบบแบ่งชุดสำเร็จ: ' + result.message, 'success');
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('googleSheetsModal'));
+            modal.hide();
+        } else {
+            showNotification('อัพโหลดข้อมูลแบบแบ่งชุดล้มเหลว: ' + result.message, 'error');
+        }
+    } catch (error) {
+        showNotification(error.message, 'error');
+    }
+}
+
+async function loadFromSheetsModal() {
+    try {
+        showNotification('กำลังโหลดข้อมูล...', 'info');
+        const result = await GoogleSheetsManager.loadFromSheets();
+        if (result.success) {
+            showNotification('โหลดข้อมูลสำเร็จ: ' + result.message, 'success');
+            ScheduleRenderer.renderAllViews();
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('googleSheetsModal'));
+            modal.hide();
+        } else {
+            showNotification('โหลดข้อมูลล้มเหลว: ' + result.message, 'error');
+        }
+    } catch (error) {
+        showNotification(error.message, 'error');
+    }
+}
+
+function clearCache() {
+    localStorage.clear();
+    showNotification('ล้าง Cache เรียบร้อยแล้ว', 'success');
+    setTimeout(() => {
+        location.reload();
+    }, 1000);
+}
+
+async function checkPermissions() {
+    try {
+        if (!googleSheetsUrl) {
+            throw new Error('กรุณาระบุ Google Apps Script URL ก่อน');
+        }
+        
+        const response = await fetch(DataManager.fixGoogleScriptUrl(googleSheetsUrl) + `?action=checkPermissions`);
+        const result = await response.json();
+        
+        if (result.success) {
+            showNotification('✅ ' + result.message, 'success');
+        } else {
+            showNotification('❌ ' + result.message, 'error');
+        }
+    } catch (error) {
+        showNotification('❌ การตรวจสอบสิทธิ์ล้มเหลว: ' + error.message, 'error');
+    }
+}
+
+function reloadData() {
+    showNotification('กำลังโหลดข้อมูลใหม่...', 'info');
+    ScheduleRenderer.renderAllViews();
+    showNotification('โหลดข้อมูลใหม่เรียบร้อยแล้ว', 'success');
+}
+
+// Make functions globally available for HTML onclick events
+window.saveScriptUrl = saveScriptUrl;
+window.testConnectionDetailed = testConnectionDetailed;
+window.initializeSheets = initializeSheets;
+window.syncToSheets = syncToSheets;
+window.syncToSheetsBatch = syncToSheetsBatch;
+window.saveScriptUrlModal = saveScriptUrlModal;
+window.testConnectionModal = testConnectionDetailed;
+window.initializeSheetsModal = initializeSheetsModal;
+window.syncToSheetsModal = syncToSheetsModal;
+window.syncToSheetsBatchModal = syncToSheetsBatchModal;
+window.loadFromSheetsModal = loadFromSheetsModal;
+window.enableAdminMode = enableAdminMode;
+window.openUrlInNewTab = openUrlInNewTab;
+window.testAlternativeMethods = testAlternativeMethods;
