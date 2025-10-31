@@ -1952,15 +1952,6 @@ class PrintManager {
             const printWindow = window.open('', '_blank');
             const title = currentView.querySelector('h3')?.textContent || 'ตารางเรียน';
             
-            // ดึงชื่อห้องเรียนจาก dropdown
-            let roomName = '';
-            if (currentView.id === 'room-schedule') {
-                const roomSelect = document.getElementById('roomSelect');
-                if (roomSelect && roomSelect.selectedIndex >= 0) {
-                    roomName = roomSelect.options[roomSelect.selectedIndex].text;
-                }
-            }
-
             printWindow.document.write(`
                 <html>
                     <head>
@@ -2026,10 +2017,10 @@ class PrintManager {
                     <body>
                         <div class="header">
                             <h2>วิทยาลัยเทคโนโลยีแหลมทอง</h2>
-                            <h3>${title}</h3>
-                            ${roomName ? `<p><strong>ห้องเรียน:</strong> ${roomName}</p>` : ''}
+                            <h3>${title}</h3>                      
+
                             <p>พิมพ์เมื่อ: ${new Date().toLocaleDateString('th-TH')}</p>
-                        </div>
+			</div>
                         ${currentView.querySelector('.table-responsive')?.innerHTML || currentView.innerHTML}
                         <div class="footer">
                             <p>ระบบจัดการตารางเรียนและตารางสอนกลุ่มงานไฟฟ้าและเล็กทรอนิกส์ - Printed from Schedule Management System</p>
