@@ -1,357 +1,887 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="utf-8" />
-  <title>ระบบจัดตารางเรียนและตารางสอน</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบจัดการตารางเรียนและตารางสอน - วิทยาลัยเทคโนโลยีแหลมทอง</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- ระบบล็อกอิน -->
-  <div id="loginModal" class="modal">
-    <div class="modal-content" style="max-width: 400px;">
-      <h2 style="text-align: center; margin-bottom: 20px;">เข้าสู่ระบบ</h2>
-      <div style="margin-bottom: 15px;">
-        <label>รหัสผ่านผู้ดูแลระบบ:</label>
-        <input type="password" id="adminPassword" style="width: 100%; padding: 10px; border: 1px solid #d1fae5; border-radius: 6px;" placeholder="กรอกรหัสผ่าน" />
-      </div>
-      <div style="display: flex; gap: 10px;">
-        <button class="btn-primary" id="loginBtn" style="flex: 1;">เข้าสู่ระบบ (Admin)</button>
-        <button class="btn-secondary" id="guestBtn" style="flex: 1;">เข้าสู่ระบบเป็นผู้เยี่ยมชม</button>
-      </div>
-      <div id="loginMessage" style="margin-top: 10px; text-align: center;"></div>
-    </div>
-  </div>
-
-  <div class="container" id="mainApp" style="display: none;">
-    <header>
-      <img src="https://tkk911.github.io/Schedule_Manager_LTC/logoLTC.png" alt="LTC Logo" />
-      <h2>ระบบจัดการตารางเรียนและตารางสอน</h2>
-      <h1>วิทยาลัยเทคโนโลยีแหลมทอง</h1>
-      <div class="sub">กลุ่มงาน ไฟฟ้าและอิเล็กทรอนิกส์</div>
-      <div class="term">
-        ภาคเรียน:
-        <input type="text" id="termInput" value="ภาคเรียนที่ 2/2568" />
-      </div>
-      <div id="userInfo" style="margin-top: 10px; font-size: 14px; display: flex; justify-content: center; align-items: center; gap: 10px;">
-        <span id="userStatus"></span>
-        <button id="logoutBtn" class="btn-secondary small" style="display: none;">ออกจากระบบ</button>
-      </div>
-    </header>
-
-    <div class="layout">
-      <!-- ตารางเรียนของนักศึกษา/ตารางสอนของอาจารย์/ เต็มพื้นที่ด้านบน -->
-      <div class="card">
-        <h2>ตารางเรียนของนักศึกษา/ตารางสอนของอาจารย์/ ตารางห้องเรียน</h2>
-        <div id="tabArea" class="tabs">
-          <div class="tab active" data-type="all">ตารางรวม</div>
-          <div class="tab" data-type="teacher">อาจารย์</div>
-          <div class="tab" data-type="class">นักเรียน (ชั้น)</div>
-          <div class="tab" data-type="room">ห้อง</div>
-        </div>
-        <div id="filterBox" style="margin-bottom:10px; display:none;">
-          <select id="filterSelect" style="padding:6px; border-radius:6px; border:1px solid #ccc; width:200px;"></select>
-        </div>
-        <div class="grid-wrap">
-          <table id="mainGrid">
-            <thead>
-              <tr>
-                <th>วัน/เวลา</th>
-                <th>คาบ 1<div>(08:30-09:20)</div></th>
-                <th>คาบ 2<div>(09:20-10:10)</div></th>
-                <th>คาบ 3<div>(10:20-11:10)</div></th>
-                <th>คาบ 4<div>(11:10-12:00)</div></th>
-                <th>พักกลางวัน<div>(12.00-12:50)</div></th>
-                <th>คาบ 5<div>(12:50-13:40)</div></th>
-                <th>คาบ 6<div>(13:40-14:30)</div></th>
-                <th>คาบ 7<div>(14:30-15:20)</div></th>
-              </tr>
-            </thead>
-            <tbody id="gridBody">				
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- layout เดิม: ซ้าย (ฟอร์ม+สรุป) / ขวา (รายการทั้งหมด) -->
-      <div style="display:grid;grid-template-columns:380px 1fr;gap:14px">
-        <div>
-          <div class="card" id="controls">
-            <h2>เพิ่ม/แก้ไข รายการสอน</h2>
-            
-            <!-- เพิ่มปุ่มจัดการข้อมูล JSON และ Google Sheets -->
-            <div style="display:flex;gap:8px;margin-bottom:15px;flex-wrap:wrap;">
-              <button type="button" id="testConnectionBtn" class="btn-primary">ทดสอบการเชื่อมต่อ</button>
-              <button type="button" id="saveLessonsBtn" class="btn-primary">บันทึกตารางเรียนเท่านั้น</button>
-              <button type="button" id="saveAllFastBtn" class="btn-primary">บันทึกทั้งหมดแบบเร็ว</button>
-              <button type="button" id="downloadJsonBtn" class="btn-primary">ดาวน์โหลด JSON</button>
-              <button type="button" id="importJsonBtn" class="btn-secondary">นำเข้า JSON</button>
-              <button type="button" id="exportToSheetsBtn" class="btn-primary">ส่งข้อมูลไป Google Sheets</button>
-              <button type="button" id="exportToSheetsChunkBtn" class="btn-info">ส่งข้อมูลแบบแบ่งชุด</button>
-              <button type="button" id="importFromSheetsBtn" class="btn-secondary">โหลดข้อมูลจาก Google Sheets</button>
-              <button type="button" id="clearDataBtn" class="btn-danger" style="display:none;">ล้างข้อมูลทั้งหมด</button>
-              <button type="button" id="debugBtn" class="btn-info" style="display:none;">Debug ข้อมูล</button>
-              <input type="file" id="jsonFileInput" accept=".json" style="display:none" />
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <img src="logoLTC.png" alt="วิทยาลัยเทคโนโลยีแหลมทอง" height="40" class="d-inline-block align-text-top me-2">
+                ระบบจัดการตารางเรียนและตารางสอน กลุ่มงานไฟฟ้าและอิเล็กทรอนิกส์
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <div class="form-check form-switch mt-2">
+                            <input class="form-check-input" type="checkbox" id="onlineMode" checked>
+                            <label class="form-check-label text-white" for="onlineMode">โหมดออนไลน์</label>
+                        </div>
+                    </li>
+                    <li class="nav-item">
+                        <span class="nav-link" id="connectionStatus">
+                            <i class="fas fa-circle text-success me-1"></i>เชื่อมต่อออนไลน์
+                        </span>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" id="loginBtn">
+                            <i class="fas fa-sign-in-alt me-1"></i> เข้าสู่ระบบ
+                        </a>
+                    </li>
+                    <li class="nav-item dropdown d-none" id="adminMenu">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-user-cog me-1"></i> ผู้ดูแลระบบ
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#teacherModal">จัดการครู</a></li>
+                            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#subjectModal">จัดการรายวิชา</a></li>
+                            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#roomModal">จัดการห้อง</a></li>
+                            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#classModal">จัดการระดับชั้น</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#" id="exportData">ส่งออกข้อมูล</a></li>
+                            <li><a class="dropdown-item" href="#" id="importData">นำเข้าข้อมูล</a></li>
+                            <li><a class="dropdown-item" href="#" id="connectGoogleSheets">เชื่อมต่อ Google Sheets</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#" id="logoutBtn">ออกจากระบบ</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" id="printBtn">
+                            <i class="fas fa-print me-1"></i> พิมพ์ตาราง
+                        </a>
+                    </li>
+                </ul>
             </div>
-            
-            <form id="lessonForm">
-              <div class="row">
-                <div style="flex:1">
-                  <label>อาจารย์</label>
-                  <select id="teacher" required>
-                    <option value="">เลือกอาจารย์</option>
-                  </select>
-                  <div class="data-management">
-                    <h4>จัดการรายชื่ออาจารย์</h4>
-                    <div class="input-group">
-                      <input type="text" id="newTeacher" placeholder="ชื่ออาจารย์" />
-                      <button type="button" class="btn-info" id="addTeacher">เพิ่ม</button>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-2 sidebar p-0">
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#" data-view="class-schedule">
+                            <i class="fas fa-graduation-cap me-2"></i> ตารางเรียน
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-view="teacher-schedule">
+                            <i class="fas fa-chalkboard-teacher me-2"></i> ตารางสอนครู
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-view="room-schedule">
+                            <i class="fas fa-door-open me-2"></i> ตารางห้อง
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-view="teacher-summary">
+                            <i class="fas fa-chart-bar me-2"></i> สรุปการสอนครู
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-view="class-summary">
+                            <i class="fas fa-book me-2"></i> สรุปรายวิชาชั้นเรียน
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-view="room-summary">
+                            <i class="fas fa-clipboard-list me-2"></i> สรุปการใช้ห้อง
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-view="system-info">
+                            <i class="fas fa-info-circle me-2"></i> ข้อมูลระบบ
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Main Content -->
+            <div class="col-md-10 p-4">
+                <!-- Class Schedule View -->
+                <div id="class-schedule" class="view-content">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h3><i class="fas fa-graduation-cap me-2"></i>ตารางเรียน</h3>
+                        <div>
+                            <select class="form-select d-inline-block w-auto" id="classSelect">
+                                <!-- Options will be populated by JavaScript -->
+                            </select>
+                        </div>
                     </div>
-                    <div class="data-list" id="teacherList"></div>
-                  </div>
-                </div>
-                <div style="flex:1">
-                  <label>ชั้นเรียน</label>
-                  <select id="classLevel" required>
-                    <option value="">เลือกชั้นเรียน</option>
-                  </select>
-                  <div class="data-management">
-                    <h4>จัดการชั้นเรียน</h4>
-                    <div class="input-group">
-                      <input type="text" id="newClass" placeholder="ชื่อชั้นเรียน" />
-                      <button type="button" class="btn-info" id="addClass">เพิ่ม</button>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-bordered schedule-table">
+                            <thead>
+                                <tr>
+                                    <th class="time-header">วัน/คาบ</th>
+                                    <th>1<br>8:30 - 9:20</th>
+                                    <th>2<br>9:20 - 10:10</th>
+                                    <th>3<br>10:20 - 11:10</th>
+                                    <th>4<br>11:10 - 12:00</th>
+                                    <th class="break-cell">พักกลางวัน<br>12:00 - 12:50</th>
+                                    <th>5<br>12:50 - 13:40</th>
+                                    <th>6<br>13:40 - 14:30</th>
+                                    <th>7<br>14:30 - 15:20</th>
+                                </tr>
+                            </thead>
+                            <tbody id="schedule-body">
+                                <!-- Schedule will be populated by JavaScript -->
+                            </tbody>
+                        </table>
                     </div>
-                    <div class="data-list" id="classList"></div>
-                  </div>
                 </div>
-              </div>
-              <div class="row">
-                <div style="flex:1">
-                  <label>ชื่อวิชา</label>
-                  <select id="subject" required>
-                    <option value="">เลือกรายวิชา</option>
-                  </select>
-                  <div class="data-management">
-                    <h4>จัดการรายวิชา</h4>
-                    <div class="input-group">
-                      <input type="text" id="newSubject" placeholder="ชื่อรายวิชา" />
-                      <button type="button" class="btn-info" id="addSubject">เพิ่ม</button>
-                    </div>
-                    <div class="data-list" id="subjectList"></div>
-                  </div>
-                </div>
-                <div style="flex:1">
-                  <label>ห้อง</label>
-                  <select id="room" required>
-                    <option value="">เลือกห้อง</option>
-                  </select>
-                  <div class="data-management">
-                    <h4>จัดการห้องเรียน</h4>
-                    <div class="input-group">
-                      <input type="text" id="newRoom" placeholder="ชื่อห้อง" />
-                      <button type="button" class="btn-info" id="addRoom">เพิ่ม</button>
-                    </div>
-                    <div class="data-list" id="roomList"></div>
-                  </div>
-                </div>
-              </div>
-              <div class="row">
-                <div style="flex:1">
-                  <label>วัน</label>
-                  <select id="day">
-                    <option value="0">จันทร์</option>
-                    <option value="1">อังคาร</option>
-                    <option value="2">พุธ</option>
-                    <option value="3">พฤหัสบดี</option>
-                    <option value="4">ศุกร์</option>
-                  </select>
-                </div>
-                <div style="flex:1">
-                  <label>คาบ</label>
-                  <select id="period">
-                    <option value="0">คาบ 1</option>
-                    <option value="1">คาบ 2</option>
-                    <option value="2">คาบ 3</option>
-                    <option value="3">คาบ 4</option>
-                    <option value="5">คาบ 5</option>
-                    <option value="6">คาบ 6</option>
-                    <option value="7">คาบ 7</option>
-                  </select>
-                </div>
-              </div>
-              <div class="row">
-                <div style="flex:1">
-                  <label>จำนวนคาบ</label>
-                  <input type="number" id="numPeriods" value="1" min="1" max="7" />
-                </div>
-              </div>
 
-              <div style="display:flex;gap:8px;margin-top:10px">
-                <button class="btn-primary" type="submit" id="submitBtn">บันทึก</button>
-                <button type="button" id="autoBtn" class="btn-primary">เพิ่มอัตโนมัติ</button>
-                <button type="button" id="resetBtn" class="btn-secondary">รีเซ็ต</button>
-                <div style="margin-left:auto;display:flex;gap:6px">
-                  <button type="button" id="exportBtn" class="btn-primary">Export Excel</button>
-                  <button type="button" id="printBtn" class="btn-secondary">Print PDF</button>
+                <!-- Teacher Schedule View -->
+                <div id="teacher-schedule" class="view-content d-none">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h3><i class="fas fa-chalkboard-teacher me-2"></i>ตารางสอนครู</h3>
+                        <div>
+                            <select class="form-select d-inline-block w-auto" id="teacherSelect">
+                                <!-- Options will be populated by JavaScript -->
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-bordered schedule-table">
+                            <thead>
+                                <tr>
+                                    <th class="time-header">วัน/คาบ</th>
+                                    <th>1<br>8:30 - 9:20</th>
+                                    <th>2<br>9:20 - 10:10</th>
+                                    <th>3<br>10:20 - 11:10</th>
+                                    <th>4<br>11:10 - 12:00</th>
+                                    <th class="break-cell">พักกลางวัน<br>12:00 - 12:50</th>
+                                    <th>5<br>12:50 - 13:40</th>
+                                    <th>6<br>13:40 - 14:30</th>
+                                    <th>7<br>14:30 - 15:20</th>
+                                </tr>
+                            </thead>
+                            <tbody id="teacher-schedule-body">
+                                <!-- Teacher schedule will be populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-              </div>
-              <div id="message" style="margin-top:10px"></div>
-            </form>
-          </div>
 
-          <div class="card">
-            <h3>สรุปคาบสอน (อาจารย์) & สรุปรายวิชาตามชั้นปี</h3>
-            
-            <!-- เพิ่มแท็บสำหรับเลือกประเภทสรุป -->
-            <div class="summary-tabs" style="display: flex; margin-bottom: 10px; border-bottom: 1px solid #d1fae5;">
-              <div class="summary-tab active" data-type="teacher">สรุปอาจารย์</div>
-              <div class="summary-tab" data-type="class">สรุปชั้นปี</div>
+                <!-- Room Schedule View -->
+                <div id="room-schedule" class="view-content d-none">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h3><i class="fas fa-door-open me-2"></i>ตารางการใช้ห้องเรียน</h3>
+                        <div>
+                            <select class="form-select d-inline-block w-auto" id="roomSelect">
+                                <!-- Options will be populated by JavaScript -->
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-bordered schedule-table">
+                            <thead>
+                                <tr>
+                                    <th class="time-header">วัน/คาบ</th>
+                                    <th>1<br>8:30 - 9:20</th>
+                                    <th>2<br>9:20 - 10:10</th>
+                                    <th>3<br>10:20 - 11:10</th>
+                                    <th>4<br>11:10 - 12:00</th>
+                                    <th class="break-cell">พักกลางวัน<br>12:00 - 12:50</th>
+                                    <th>5<br>12:50 - 13:40</th>
+                                    <th>6<br>13:40 - 14:30</th>
+                                    <th>7<br>14:30 - 15:20</th>
+                                </tr>
+                            </thead>
+                            <tbody id="room-schedule-body">
+                                <!-- Room schedule will be populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Teacher Summary View -->
+                <div id="teacher-summary" class="view-content d-none">
+                    <h3 class="mb-3"><i class="fas fa-chart-bar me-2"></i>สรุปการสอนครู</h3>
+                    
+                    <div class="row" id="teacher-summary-content">
+                        <!-- Teacher summary will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Class Summary View -->
+                <div id="class-summary" class="view-content d-none">
+                    <h3 class="mb-3"><i class="fas fa-book me-2"></i>สรุปรายวิชาชั้นเรียน</h3>
+                    
+                    <div class="row" id="class-summary-content">
+                        <!-- Class summary will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Room Summary View -->
+                <div id="room-summary" class="view-content d-none">
+                    <h3 class="mb-3"><i class="fas fa-clipboard-list me-2"></i>สรุปการใช้ห้อง</h3>
+                    
+                    <div class="row" id="room-summary-content">
+                        <!-- Room summary will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- System Info View -->
+                <div id="system-info" class="view-content d-none">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h3><i class="fas fa-info-circle me-2"></i>ข้อมูลระบบ</h3>
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">สถิติระบบ</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row text-center">
+                                        <div class="col-md-3 mb-3">
+                                            <div class="stat-card bg-primary text-white p-3 rounded">
+                                                <h4 id="teacherCount">0</h4>
+                                                <p>จำนวนครู</p>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3 mb-3">
+                                            <div class="stat-card bg-success text-white p-3 rounded">
+                                                <h4 id="subjectCount">0</h4>
+                                                <p>จำนวนรายวิชา</p>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3 mb-3">
+                                            <div class="stat-card bg-warning text-white p-3 rounded">
+                                                <h4 id="roomCount">0</h4>
+                                                <p>จำนวนห้อง</p>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3 mb-3">
+                                            <div class="stat-card bg-info text-white p-3 rounded">
+                                                <h4 id="classCount">0</h4>
+                                                <p>จำนวนระดับชั้น</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card mt-4">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">การตั้งค่า Google Sheets</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label for="scriptUrl" class="form-label">Google Apps Script URL</label>
+                                        <input type="text" class="form-control" id="scriptUrl" placeholder="https://script.google.com/macros/s/...">
+                                        <div class="form-text">ป้อน URL จาก Google Apps Script Deployment</div>
+                                    </div>
+                                    <div class="d-grid gap-2">
+                                        <button class="btn btn-primary" id="saveScriptUrl">
+                                            <i class="fas fa-save me-1"></i> บันทึก URL
+                                        </button>
+                                        <button class="btn btn-success" id="testConnection">
+                                            <i class="fas fa-plug me-1"></i> ทดสอบการเชื่อมต่อ
+                                        </button>
+                                        <button class="btn btn-warning" id="initializeSheets">
+                                            <i class="fas fa-cog me-1"></i> เริ่มต้นระบบ Sheets
+                                        </button>
+                                        <button class="btn btn-info" id="syncToSheets">
+                                            <i class="fas fa-sync me-1"></i> Sync ไปยัง Google Sheets
+                                        </button>
+                                        <button class="btn btn-info" id="syncToSheetsBatch">
+                                            <i class="fas fa-cloud-upload-alt me-1"></i> อัพโหลดข้อมูลแบบแบ่งชุด
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card mt-4">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">
+                                        <i class="fas fa-tools me-2"></i>เครื่องมือแก้ไขปัญหา
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="d-grid gap-2">
+                                        <button class="btn btn-outline-warning" id="clearCache">
+                                            <i class="fas fa-broom me-1"></i> ล้าง Cache
+                                        </button>
+                                        <button class="btn btn-outline-info" id="checkPermissions">
+                                            <i class="fas fa-shield-alt me-1"></i> ตรวจสอบสิทธิ์
+                                        </button>
+                                        <button class="btn btn-outline-secondary" id="reloadData">
+                                            <i class="fas fa-redo me-1"></i> โหลดข้อมูลใหม่
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">คู่มือการใช้งาน</h5>
+                                </div>
+                                <div class="card-body">
+                                    <h6>สำหรับผู้ใช้ทั่วไป:</h6>
+                                    <ul>
+                                        <li>เลือกดูตารางเรียนจากเมนูด้านซ้าย</li>
+                                        <li>สามารถเปลี่ยนระดับชั้น/ครู/ห้องได้</li>
+                                        <li>พิมพ์ตารางโดยคลิกปุ่มพิมพ์</li>
+                                    </ul>
+                                    
+                                    <h6>สำหรับผู้ดูแลระบบ:</h6>
+                                    <ul>
+                                        <li>เข้าสู่ระบบด้วย username: <code>admin</code>, password: <code>admin</code></li>
+                                        <li>จัดการข้อมูลผ่านเมนูผู้ดูแล</li>
+                                        <li>คลิกที่ช่องตารางเรียนเพื่อแก้ไขข้อมูล</li>
+                                        <li>นำเข้า/ส่งออกข้อมูลได้</li>
+                                        <li>เชื่อมต่อกับ Google Sheets ได้</li>
+                                    </ul>
+                                    
+                                    <div class="alert alert-info mt-3">
+                                        <small>
+                                            <strong>หมายเหตุ:</strong> ระบบนี้ทำงานบนเบราว์เซอร์ 
+                                            ข้อมูลจะถูกเก็บใน Local Storage ของเบราว์เซอร์
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card mt-4">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">สถานะการเชื่อมต่อ</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="connectionDetails">
+                                        <p><strong>โหมด:</strong> <span id="modeStatus">ออนไลน์</span></p>
+                                        <p><strong>URL:</strong> <span id="urlStatus" class="text-truncate d-inline-block" style="max-width: 200px;">-</span></p>
+                                        <p><strong>อัพเดทล่าสุด:</strong> <span id="lastUpdate">-</span></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            
-            <!-- ส่วนสรุปอาจารย์ (เดิม) -->
-            <div id="teacherSummarySection">
-              <div class="summary-controls" style="margin-bottom:10px;">
-                <select id="teacherSummarySelect" style="padding:6px; border-radius:6px; border:1px solid #ccc; width:100%;">
-                  <option value="all">แสดงทั้งหมด</option>
-                </select>
-              </div>
-              <div id="teacherSummary" class="summary small"></div>
-            </div>
-            
-            <!-- ส่วนสรุปชั้นปี (ใหม่) -->
-            <div id="classSummarySection" style="display: none;">
-              <div class="summary-controls" style="margin-bottom:10px;">
-                <select id="classSummarySelect" style="padding:6px; border-radius:6px; border:1px solid #ccc; width:100%;">
-                  <option value="all">แสดงทั้งหมด</option>
-                </select>
-              </div>
-              <div id="classSummary" class="summary small"></div>
-            </div>
-          </div>
         </div>
+    </div>
 
-        <div>
-          <div class="card">
-            <h2>รายการจัดการเรียนทั้งหมด</h2>
-            
-            <!-- เพิ่มส่วนกรองข้อมูล -->
-            <div class="filter-controls" style="margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
-              <div>
-                <label>กรองตามรายวิชา:</label>
-                <select id="filterSubject" style="padding: 6px; border-radius: 6px; border: 1px solid #ccc; width: 150px;">
-                  <option value="">ทั้งหมด</option>
-                </select>
-              </div>
-              <div>
-                <label>กรองตามครู:</label>
-                <select id="filterTeacher" style="padding: 6px; border-radius: 6px; border: 1px solid #ccc; width: 150px;">
-                  <option value="">ทั้งหมด</option>
-                </select>
-              </div>
-              <div>
-                <label>กรองตามชั้น:</label>
-                <select id="filterClass" style="padding: 6px; border-radius: 6px; border: 1px solid #ccc; width: 150px;">
-                  <option value="">ทั้งหมด</option>
-                </select>
-              </div>
-              <div>
-                <label>กรองตามห้อง:</label>
-                <select id="filterRoom" style="padding: 6px; border-radius: 6px; border: 1px solid #ccc; width: 150px;">
-                  <option value="">ทั้งหมด</option>
-                </select>
-              </div>
-              <div>
-                <label>กรองตามวัน:</label>
-                <select id="filterDay" style="padding: 6px; border-radius: 6px; border: 1px solid #ccc; width: 120px;">
-                  <option value="">ทั้งหมด</option>
-                  <option value="0">จันทร์</option>
-                  <option value="1">อังคาร</option>
-                  <option value="2">พุธ</option>
-                  <option value="3">พฤหัสบดี</option>
-                  <option value="4">ศุกร์</option>
-                </select>
-              </div>
-              <div>
-                <label>กรองตามคาบ:</label>
-                <select id="filterPeriod" style="padding: 6px; border-radius: 6px; border: 1px solid #ccc; width: 120px;">
-                  <option value="">ทั้งหมด</option>
-                  <option value="0">คาบ 1</option>
-                  <option value="1">คาบ 2</option>
-                  <option value="2">คาบ 3</option>
-                  <option value="3">คาบ 4</option>
-                  <option value="5">คาบ 5</option>
-                  <option value="6">คาบ 6</option>
-                  <option value="7">คาบ 7</option>
-                </select>
-              </div>
-              <div style="align-self: end;">
-                <button type="button" id="resetFilterBtn" class="btn-secondary" style="padding: 6px 12px;">รีเซ็ตการกรอง</button>
-              </div>
+    <!-- Login Modal -->
+    <div class="modal fade" id="loginModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">เข้าสู่ระบบผู้ดูแล</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="loginForm">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">ชื่อผู้ใช้</label>
+                            <input type="text" class="form-control" id="username" value="admin" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">รหัสผ่าน</label>
+                            <input type="password" class="form-control" id="password" value="admin" required>
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">เข้าสู่ระบบ</button>
+                        </div>
+                        <div class="mt-2 text-center">
+                            <small class="text-muted">ใช้ username: admin, password: admin</small>
+                        </div>
+                    </form>
+                </div>
             </div>
-            
-            <!-- เพิ่มระบบแบ่งหน้า -->
-            <div class="pagination-controls" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-              <div>
-                <span id="paginationInfo" style="font-size: 14px; color: #666;"></span>
-              </div>
-              <div style="display: flex; gap: 5px;">
-                <button id="firstPageBtn" class="btn-secondary small">หน้าแรก</button>
-                <button id="prevPageBtn" class="btn-secondary small">ก่อนหน้า</button>
-                <span id="pageNumbers" style="display: flex; gap: 5px;"></span>
-                <button id="nextPageBtn" class="btn-secondary small">ถัดไป</button>
-                <button id="lastPageBtn" class="btn-secondary small">หน้าสุดท้าย</button>
-              </div>
-              <div>
-                <label>แสดง:</label>
-                <select id="pageSizeSelect" style="padding: 4px; border-radius: 4px; border: 1px solid #ccc;">
-                  <option value="50">50 รายการ</option>
-                  <option value="100" selected>100 รายการ</option>
-                  <option value="200">200 รายการ</option>
-                  <option value="500">500 รายการ</option>
-                </select>
-              </div>
-            </div>
-            
-            <table id="lessonTable">
-              <thead>
-                <tr><th>วิชา</th><th>ครู</th><th>ชั้น</th><th>ห้อง</th><th>วัน</th><th>คาบ</th><th>จัดการ</th></tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-          </div>
         </div>
-      </div>
     </div>
-  </div>
 
-  <!-- Modal สำหรับแก้ไขข้อมูล -->
-  <div id="editModal" class="modal">
-    <div class="modal-content">
-      <span class="close">&times;</span>
-      <h3 id="modalTitle">แก้ไขข้อมูล</h3>
-      <input type="text" id="editInput" />
-      <div style="display:flex;gap:8px;margin-top:15px">
-        <button class="btn-primary" id="saveEditBtn">บันทึก</button>
-        <button class="btn-secondary" id="cancelEditBtn">ยกเลิก</button>
-      </div>
+    <!-- Teacher Management Modal -->
+    <div class="modal fade" id="teacherModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">จัดการข้อมูลครู</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex justify-content-between mb-3">
+                        <button class="btn btn-primary" id="addTeacherBtn">
+                            <i class="fas fa-plus me-1"></i> เพิ่มครู
+                        </button>
+                        <div class="form-text">จำนวนครู: <span id="teacherCountBadge">0</span> คน</div>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>รหัส</th>
+                                    <th>ชื่อ-สกุล</th>
+                                    <th>ตำแหน่ง</th>
+                                    <th width="120">การจัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="teacherTableBody">
+                                <!-- Teacher data will be populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-  </div>
 
-  <!-- Loading Spinner (แก้ไขแล้ว) -->
-  <div id="loading" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); justify-content: center; align-items: center; z-index: 9999; color: white; font-size: 18px; flex-direction: column;">
-    <div style="background: white; padding: 30px; border-radius: 10px; color: black; display: flex; align-items: center; gap: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); flex-direction: column;">
-      <div class="loading-spinner" style="border: 4px solid #f3f3f3; border-top: 4px solid #10b981; border-radius: 50%; width: 40px; height: 40px; animation: spin 2s linear infinite;"></div>
-      <div style="text-align: center;">
-        <div style="font-weight: bold; margin-bottom: 5px;">🔄 กำลังโหลดข้อมูล...</div>
-        <div style="font-size: 14px; color: #666; margin-bottom: 10px;">กรุณารอสักครู่</div>
-        <button onclick="forceHideLoading()" style="padding: 8px 16px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: bold;">
-          🚫 ยกเลิกการโหลด
-        </button>
-      </div>
+    <!-- Add/Edit Teacher Modal -->
+    <div class="modal fade" id="teacherFormModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="teacherFormTitle">เพิ่มครู</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="teacherForm">
+                        <input type="hidden" id="teacherId">
+                        <div class="mb-3">
+                            <label for="teacherCode" class="form-label">รหัสครู <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="teacherCode" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="teacherName" class="form-label">ชื่อ-สกุล <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="teacherName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="teacherPosition" class="form-label">ตำแหน่ง</label>
+                            <input type="text" class="form-control" id="teacherPosition" placeholder="ครู, หัวหน้าสาขา, ฯลฯ">
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">บันทึก</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
     </div>
-  </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="script.js"></script>
+    <!-- Subject Management Modal -->
+    <div class="modal fade" id="subjectModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">จัดการข้อมูลรายวิชา</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex justify-content-between mb-3">
+                        <button class="btn btn-primary" id="addSubjectBtn">
+                            <i class="fas fa-plus me-1"></i> เพิ่มรายวิชา
+                        </button>
+                        <div class="form-text">จำนวนรายวิชา: <span id="subjectCountBadge">0</span> รายการ</div>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>รหัสวิชา</th>
+                                    <th>ชื่อวิชา</th>
+                                    <th>หน่วยกิต</th>
+                                    <th width="120">การจัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="subjectTableBody">
+                                <!-- Subject data will be populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Subject Modal -->
+    <div class="modal fade" id="subjectFormModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="subjectFormTitle">เพิ่มรายวิชา</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="subjectForm">
+                        <input type="hidden" id="subjectId">
+                        <div class="mb-3">
+                            <label for="subjectCode" class="form-label">รหัสวิชา <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="subjectCode" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="subjectName" class="form-label">ชื่อวิชา <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="subjectName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="subjectCredit" class="form-label">หน่วยกิต</label>
+                            <input type="number" class="form-control" id="subjectCredit" min="0" max="10" step="0.5">
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">บันทึก</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Room Management Modal -->
+    <div class="modal fade" id="roomModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">จัดการข้อมูลห้องเรียน</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex justify-content-between mb-3">
+                        <button class="btn btn-primary" id="addRoomBtn">
+                            <i class="fas fa-plus me-1"></i> เพิ่มห้อง
+                        </button>
+                        <div class="form-text">จำนวนห้อง: <span id="roomCountBadge">0</span> ห้อง</div>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>รหัสห้อง</th>
+                                    <th>ชื่อห้อง</th>
+                                    <th>ประเภท</th>
+                                    <th>ความจุ</th>
+                                    <th width="120">การจัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="roomTableBody">
+                                <!-- Room data will be populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Room Modal -->
+    <div class="modal fade" id="roomFormModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="roomFormTitle">เพิ่มห้อง</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="roomForm">
+                        <input type="hidden" id="roomId">
+                        <div class="mb-3">
+                            <label for="roomCode" class="form-label">รหัสห้อง <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="roomCode" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="roomName" class="form-label">ชื่อห้อง <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="roomName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="roomType" class="form-label">ประเภทห้อง</label>
+                            <select class="form-select" id="roomType">
+                                <option value="ห้องเรียน">ห้องเรียน</option>
+                                <option value="ห้องปฏิบัติการ">ห้องปฏิบัติการ</option>
+                                <option value="Workshop">Workshop</option>
+                                <option value="ห้องสัมมนา">ห้องสัมมนา</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="roomCapacity" class="form-label">ความจุ</label>
+                            <input type="number" class="form-control" id="roomCapacity" min="1" max="100">
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">บันทึก</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Class Management Modal -->
+    <div class="modal fade" id="classModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">จัดการข้อมูลระดับชั้น</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex justify-content-between mb-3">
+                        <button class="btn btn-primary" id="addClassBtn">
+                            <i class="fas fa-plus me-1"></i> เพิ่มระดับชั้น
+                        </button>
+                        <div class="form-text">จำนวนระดับชั้น: <span id="classCountBadge">0</span> ชั้น</div>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>รหัสชั้น</th>
+                                    <th>ชื่อชั้น</th>
+                                    <th>สาขาวิชา</th>
+                                    <th>ครูที่ปรึกษา</th>
+                                    <th width="120">การจัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="classTableBody">
+                                <!-- Class data will be populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Class Modal -->
+    <div class="modal fade" id="classFormModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="classFormTitle">เพิ่มระดับชั้น</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="classForm">
+                        <input type="hidden" id="classId">
+                        <div class="mb-3">
+                            <label for="classCode" class="form-label">รหัสระดับชั้น <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="classCode" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="className" class="form-label">ชื่อระดับชั้น <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="className" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="classProgram" class="form-label">สาขาวิชา</label>
+                            <input type="text" class="form-control" id="classProgram">
+                        </div>
+                        <div class="mb-3">
+                            <label for="classAdvisor" class="form-label">ครูที่ปรึกษา</label>
+                            <select class="form-select" id="classAdvisor">
+                                <option value="">-- เลือกครูที่ปรึกษา --</option>
+                            </select>
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">บันทึก</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Schedule Modal -->
+    <div class="modal fade schedule-form-modal" id="scheduleFormModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-edit me-2"></i>
+                        <span id="scheduleFormTitle">แก้ไขตารางเรียน</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="scheduleForm">
+                        <input type="hidden" id="scheduleClassName">
+                        <input type="hidden" id="scheduleDay">
+                        <input type="hidden" id="schedulePeriod">
+                        
+                        <div class="mb-3">
+                            <label class="form-label">ข้อมูลตารางเรียน</label>
+                            <div class="card bg-light p-3">
+                                <div class="row">
+                                    <div class="col-4"><strong>ระดับชั้น:</strong></div>
+                                    <div class="col-8" id="scheduleClassDisplay"></div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-4"><strong>วัน:</strong></div>
+                                    <div class="col-8" id="scheduleDayDisplay"></div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-4"><strong>คาบ:</strong></div>
+                                    <div class="col-8" id="schedulePeriodDisplay"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="scheduleSubject" class="form-label">
+                                <i class="fas fa-book me-1"></i>วิชา
+                            </label>
+                            <select class="form-select" id="scheduleSubject">
+                                <option value="">-- เลือกวิชา --</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="scheduleTeacher" class="form-label">
+                                <i class="fas fa-chalkboard-teacher me-1"></i>ครูผู้สอน
+                            </label>
+                            <select class="form-select" id="scheduleTeacher">
+                                <option value="">-- เลือกครู --</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="scheduleRoom" class="form-label">
+                                <i class="fas fa-door-open me-1"></i>ห้อง
+                            </label>
+                            <select class="form-select" id="scheduleRoom">
+                                <option value="">-- เลือกห้อง --</option>
+                            </select>
+                        </div>
+                        
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i> บันทึก
+                            </button>
+                            <button type="button" class="btn btn-danger d-none" id="deleteScheduleBtn">
+                                <i class="fas fa-trash me-1"></i> ลบรายการนี้
+                            </button>
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                <i class="fas fa-times me-1"></i> ยกเลิก
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import/Export Modal -->
+    <div class="modal fade" id="importExportModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="importExportTitle">นำเข้า/ส่งออกข้อมูล</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-4">
+                        <h6><i class="fas fa-download me-1"></i>ส่งออกข้อมูล</h6>
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-outline-primary" id="exportTeachers">
+                                <i class="fas fa-user me-1"></i> ส่งออกข้อมูลครู
+                            </button>
+                            <button class="btn btn-outline-primary" id="exportSubjects">
+                                <i class="fas fa-book me-1"></i> ส่งออกข้อมูลรายวิชา
+                            </button>
+                            <button class="btn btn-outline-primary" id="exportRooms">
+                                <i class="fas fa-door-open me-1"></i> ส่งออกข้อมูลห้อง
+                            </button>
+                            <button class="btn btn-outline-primary" id="exportClasses">
+                                <i class="fas fa-users me-1"></i> ส่งออกข้อมูลระดับชั้น
+                            </button>
+                            <button class="btn btn-outline-primary" id="exportSchedule">
+                                <i class="fas fa-calendar me-1"></i> ส่งออกข้อมูลตารางเรียน
+                            </button>
+                            <button class="btn btn-primary" id="exportAll">
+                                <i class="fas fa-database me-1"></i> ส่งออกข้อมูลทั้งหมด
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h6><i class="fas fa-upload me-1"></i>นำเข้าข้อมูล</h6>
+                        <div class="mb-3">
+                            <label for="importFile" class="form-label">เลือกไฟล์ JSON</label>
+                            <input class="form-control" type="file" id="importFile" accept=".json">
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="replaceData">
+                            <label class="form-check-label" for="replaceData">
+                                แทนที่ข้อมูลเดิมทั้งหมด
+                            </label>
+                        </div>
+                        <div class="d-grid">
+                            <button class="btn btn-warning" id="importDataBtn">
+                                <i class="fas fa-file-import me-1"></i> นำเข้าข้อมูล
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Google Sheets Setup Modal -->
+    <div class="modal fade" id="googleSheetsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">การตั้งค่า Google Sheets</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <h6><i class="fas fa-info-circle me-1"></i>คำแนะนำในการตั้งค่า</h6>
+                        <ol class="mb-0">
+                            <li>สร้าง Google Sheet ใหม่</li>
+                            <li>เปิด Apps Script จากเมนู Extensions</li>
+                            <li>แทนที่โค้ดด้วยไฟล์จากโฟลเดอร์ google-sheets-setup</li>
+                            <li>Deploy เป็น Web App</li>
+                            <li>คัดลอก URL มาใส่ในช่องด้านล่าง</li>
+                        </ol>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="scriptUrlModal" class="form-label">Google Apps Script URL</label>
+                        <input type="text" class="form-control" id="scriptUrlModal" placeholder="https://script.google.com/macros/s/...">
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-success" id="saveScriptUrlModal">
+                            <i class="fas fa-save me-1"></i> บันทึก URL
+                        </button>
+                        <button class="btn btn-primary" id="testConnectionModal">
+                            <i class="fas fa-plug me-1"></i> ทดสอบการเชื่อมต่อ
+                        </button>
+                        <button class="btn btn-warning" id="initializeSheetsModal">
+                            <i class="fas fa-cog me-1"></i> เริ่มต้นระบบ Sheets
+                        </button>
+                        <button class="btn btn-info" id="syncToSheetsModal">
+                            <i class="fas fa-cloud-upload me-1"></i> อัพโหลดข้อมูลไปยัง Google Sheets
+                        </button>
+                        <button class="btn btn-info" id="syncToSheetsBatchModal">
+                            <i class="fas fa-cloud-upload-alt me-1"></i> อัพโหลดข้อมูลแบบแบ่งชุด
+                        </button>
+                        <button class="btn btn-warning" id="loadFromSheetsModal">
+                            <i class="fas fa-cloud-download me-1"></i> โหลดข้อมูลจาก Google Sheets
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
