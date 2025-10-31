@@ -1,16 +1,13 @@
-/* ระบบจัดการตารางเรียนและตารางสอน - Styles */
-/* Version: 3.3.0 - Fixed "Failed to fetch" error and improved error handling */
-
+/* styles.css */
 :root {
     --primary-color: #2c3e50;
-    --secondary-color: #3498db;
-    --accent-color: #e74c3c;
-    --light-color: #ecf0f1;
-    --dark-color: #2c3e50;
+    --secondary-color: #34495e;
+    --accent-color: #3498db;
     --success-color: #27ae60;
     --warning-color: #f39c12;
     --danger-color: #e74c3c;
-    --info-color: #17a2b8;
+    --light-color: #ecf0f1;
+    --dark-color: #2c3e50;
 }
 
 * {
@@ -19,71 +16,43 @@
 
 body {
     background-color: #f8f9fa;
-    color: #333;
-    line-height: 1.6;
+    padding-top: 0;
 }
 
 /* Navigation Bar */
 .navbar {
-    background: linear-gradient(135deg, var(--primary-color) 0%, #34495e 100%);
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color)) !important;
     box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    padding: 0.8rem 0;
 }
 
 .navbar-brand {
     font-weight: 600;
-    font-size: 1.3rem;
-    display: flex;
-    align-items: center;
-}
-
-/* Logo Styles */
-.navbar-brand img {
-    border-radius: 4px;
-    transition: transform 0.3s ease;
-    margin-right: 10px;
-}
-
-.navbar-brand:hover img {
-    transform: scale(1.05);
-}
-
-.navbar-nav .nav-link {
-    padding: 0.5rem 1rem;
-    transition: all 0.3s ease;
-}
-
-.navbar-nav .nav-link:hover {
-    background-color: rgba(255,255,255,0.1);
-    border-radius: 5px;
+    font-size: 1.1rem;
 }
 
 /* Sidebar */
 .sidebar {
-    background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
+    background: linear-gradient(180deg, var(--secondary-color), var(--primary-color));
+    min-height: calc(100vh - 56px);
     box-shadow: 2px 0 10px rgba(0,0,0,0.1);
-    min-height: calc(100vh - 76px);
-    border-right: 1px solid #dee2e6;
 }
 
 .sidebar .nav-link {
-    padding: 12px 20px;
-    color: #555;
-    border-left: 4px solid transparent;
-    transition: all 0.3s;
+    color: var(--light-color) !important;
+    padding: 15px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    transition: all 0.3s ease;
     font-weight: 500;
 }
 
 .sidebar .nav-link:hover {
-    background-color: #e9ecef;
-    color: var(--primary-color);
-    border-left-color: var(--secondary-color);
+    background-color: rgba(255,255,255,0.1);
+    padding-left: 25px;
 }
 
 .sidebar .nav-link.active {
-    background-color: var(--secondary-color);
-    color: white;
-    border-left-color: var(--primary-color);
+    background-color: var(--accent-color);
+    border-left: 4px solid var(--warning-color);
 }
 
 .sidebar .nav-link i {
@@ -91,321 +60,360 @@ body {
     text-align: center;
 }
 
-/* Schedule Table */
+/* Main Content */
+.view-content {
+    animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Schedule Tables */
 .schedule-table {
-    background-color: white;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    background: white;
     border-radius: 10px;
     overflow: hidden;
-    margin-bottom: 0;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 
 .schedule-table th {
-    background: linear-gradient(135deg, var(--primary-color) 0%, #34495e 100%);
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
     color: white;
+    font-weight: 600;
     text-align: center;
     vertical-align: middle;
-    font-weight: 600;
-    padding: 12px 8px;
     border: none;
+    padding: 12px 8px;
 }
 
-.schedule-table .time-header {
-    background: linear-gradient(135deg, var(--dark-color) 0%, #2c3e50 100%);
+.schedule-table th.time-header {
+    background: var(--dark-color);
     width: 120px;
-    font-weight: 700;
 }
 
-.schedule-table .break-cell {
-    background: linear-gradient(135deg, var(--warning-color) 0%, #e67e22 100%);
-    color: white;
-    font-weight: 600;
+.schedule-table th.break-cell {
+    background: linear-gradient(135deg, var(--warning-color), #e67e22);
+    writing-mode: vertical-lr;
+    text-orientation: mixed;
+    width: 40px;
 }
 
-/* จัดข้อความในตารางให้อยู่ตรงกลาง */
 .schedule-table td {
     vertical-align: middle;
-    height: 85px;
-    padding: 8px;
+    text-align: center;
+    padding: 15px 8px;
     border: 1px solid #dee2e6;
+    height: 80px;
+    cursor: pointer;
     transition: all 0.3s ease;
     position: relative;
-    text-align: center;
-}
-
-.schedule-table td div {
-    text-align: center;
-}
-
-/* จัดการกับข้อความหลายบรรทัด */
-.subject-cell div {
-    line-height: 1.3;
-    margin-bottom: 2px;
-    text-align: center;
-}
-
-/* สำหรับข้อความในเซลล์ที่ว่าง */
-.empty-cell div {
-    text-align: center;
-}
-
-/* สำหรับกิจกรรม */
-.activity {
-    text-align: center;
-    vertical-align: middle;
 }
 
 .schedule-table td:hover {
     background-color: #f8f9fa;
-}
-
-/* Subject Cards in Table */
-.subject-cell {
-    background: linear-gradient(135deg, #e8f4fc 0%, #ffffff 100%);
-    border-left: 4px solid var(--secondary-color);
-    border-radius: 5px;
-}
-
-.subject-cell:hover {
-    background: linear-gradient(135deg, #d1ecf1 0%, #e8f4fc 100%);
-}
-
-/* Edit Mode Styles */
-.edit-mode .subject-cell {
-    cursor: pointer !important;
-    transition: all 0.3s ease;
-    position: relative;
-}
-
-.edit-mode .subject-cell:hover {
-    background: linear-gradient(135deg, #d1ecf1 0%, #b6e0f1 100%);
     transform: scale(1.02);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    z-index: 10;
+    z-index: 1;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
 
-.edit-mode .subject-cell:hover::after {
-    content: "✏️ คลิกเพื่อแก้ไข";
-    position: absolute;
-    bottom: 2px;
-    right: 2px;
-    background: rgba(0,0,0,0.8);
-    color: white;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: normal;
+.schedule-table td.empty-slot {
+    background-color: #f8f9fa;
+    color: #6c757d;
 }
 
-.edit-mode .empty-cell {
-    cursor: pointer !important;
-    transition: all 0.3s ease;
-    background: #f8f9fa;
+.schedule-table td.filled-slot {
+    background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+    border: 2px solid var(--accent-color);
+    font-weight: 500;
 }
 
-.edit-mode .empty-cell:hover {
-    background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
-    transform: scale(1.02);
-}
-
-.edit-mode .empty-cell:hover::after {
-    content: "➕ คลิกเพื่อเพิ่ม";
-    position: absolute;
-    bottom: 2px;
-    right: 2px;
-    background: rgba(0,0,0,0.8);
-    color: white;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: normal;
-}
-
-/* Room Display Styles */
-.lab-room {
-    background-color: #e8f5e8;
-    border-left: 4px solid #28a745;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-weight: 600;
+.schedule-table .schedule-item {
     font-size: 0.85rem;
-    text-align: center;
+    line-height: 1.3;
 }
 
-.class-room {
-    background-color: #e8f4fc;
-    border-left: 4px solid #007bff;
-    padding: 2px 6px;
-    border-radius: 4px;
+.schedule-table .subject-name {
     font-weight: 600;
-    font-size: 0.85rem;
-    text-align: center;
-}
-
-.multiple-rooms {
-    background-color: #fff3cd;
-    border-left: 4px solid #ffc107;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-weight: 600;
-    font-size: 0.85rem;
-    text-align: center;
-}
-
-.workshop-room {
-    background-color: #f8d7da;
-    border-left: 4px solid #dc3545;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-weight: 600;
-    font-size: 0.85rem;
-    text-align: center;
-}
-
-/* Summary Cards */
-.summary-card {
-    border-radius: 12px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-    transition: all 0.3s ease;
-    border: none;
-    overflow: hidden;
-}
-
-.summary-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-}
-
-.teacher-card {
-    border-left: 5px solid var(--success-color);
-}
-
-.subject-card {
-    border-left: 5px solid var(--secondary-color);
-}
-
-.room-card {
-    border-left: 5px solid var(--warning-color);
-}
-
-.summary-card .card-header {
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-    border-bottom: 1px solid #dee2e6;
-    padding: 1rem 1.25rem;
-}
-
-.summary-card .card-title {
     color: var(--dark-color);
-    font-weight: 600;
-    margin-bottom: 0.25rem;
+    margin-bottom: 2px;
 }
 
-/* Stat Cards */
+.schedule-table .teacher-name {
+    color: var(--secondary-color);
+    font-size: 0.8rem;
+    margin-bottom: 2px;
+}
+
+.schedule-table .room-name {
+    color: var(--success-color);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* Cards and Stats */
 .stat-card {
-    border-radius: 12px;
-    text-align: center;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-    transition: all 0.3s ease;
-    border: none;
+    transition: transform 0.3s ease;
 }
 
 .stat-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+    transform: translateY(-5px);
 }
 
-.stat-card h4 {
-    font-size: 2.5rem;
-    margin-bottom: 0.5rem;
-    font-weight: 700;
+.card {
+    border: none;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
 }
 
-.stat-card p {
-    margin-bottom: 0;
-    font-size: 0.9rem;
-    opacity: 0.9;
-    font-weight: 500;
-}
-
-/* Modal Styles */
-.modal-header {
-    background: linear-gradient(135deg, var(--primary-color) 0%, #34495e 100%);
+.card-header {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
     color: white;
-    border-bottom: none;
-    padding: 1.25rem;
-}
-
-.schedule-form-modal .modal-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-
-.modal-title {
+    border-radius: 10px 10px 0 0 !important;
     font-weight: 600;
 }
 
-.btn-close-white {
-    filter: invert(1);
+/* Summary Views */
+.summary-card {
+    border: none;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+    transition: all 0.3s ease;
 }
 
-/* Form Styles */
-.form-control:focus, .form-select:focus {
-    border-color: var(--secondary-color);
-    box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+.summary-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
 }
 
-.form-label {
-    font-weight: 500;
-    color: #495057;
-    margin-bottom: 0.5rem;
+.summary-card .card-header {
+    background: linear-gradient(135deg, var(--accent-color), #2980b9);
+    color: white;
+    font-weight: 600;
 }
 
-/* Button Styles */
+/* Buttons */
 .btn {
     border-radius: 6px;
     font-weight: 500;
     transition: all 0.3s ease;
-    padding: 0.5rem 1rem;
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, var(--secondary-color) 0%, #2980b9 100%);
+    background: linear-gradient(135deg, var(--accent-color), #2980b9);
     border: none;
 }
 
-.btn-primary:hover {
-    background: linear-gradient(135deg, #2980b9 0%, #21618c 100%);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
-}
-
 .btn-success {
-    background: linear-gradient(135deg, var(--success-color) 0%, #219653 100%);
+    background: linear-gradient(135deg, var(--success-color), #229954);
     border: none;
 }
 
 .btn-warning {
-    background: linear-gradient(135deg, var(--warning-color) 0%, #e67e22 100%);
+    background: linear-gradient(135deg, var(--warning-color), #e67e22);
     border: none;
 }
 
 .btn-danger {
-    background: linear-gradient(135deg, var(--danger-color) 0%, #c0392b 100%);
+    background: linear-gradient(135deg, var(--danger-color), #c0392b);
     border: none;
 }
 
-.btn-info {
-    background: linear-gradient(135deg, var(--info-color) 0%, #138496 100%);
-    border: none;
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
 }
 
-/* Badge Styles */
+/* Forms */
+.form-control, .form-select {
+    border-radius: 6px;
+    border: 1px solid #ddd;
+    padding: 8px 12px;
+    transition: all 0.3s ease;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+}
+
+/* Modals */
+.modal-content {
+    border: none;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+.modal-header {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    color: white;
+    border-radius: 10px 10px 0 0;
+}
+
+.modal-footer {
+    border-top: 1px solid #dee2e6;
+    border-radius: 0 0 10px 10px;
+}
+
+/* Schedule Form Modal */
+.schedule-form-modal .modal-header {
+    background: linear-gradient(135deg, var(--accent-color), #2980b9);
+}
+
+/* Tables */
+.table-striped tbody tr:nth-of-type(odd) {
+    background-color: rgba(52, 152, 219, 0.05);
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(52, 152, 219, 0.1);
+}
+
+/* Connection Status */
+#connectionStatus .fa-circle {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.connection-online {
+    color: var(--success-color);
+}
+
+.connection-offline {
+    color: var(--danger-color);
+}
+
+/* Print Styles */
+@media print {
+    .navbar, .sidebar, .btn, .modal, .toast-container {
+        display: none !important;
+    }
+    
+    .col-md-2 {
+        display: none;
+    }
+    
+    .col-md-10 {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+    
+    .schedule-table {
+        box-shadow: none;
+        border: 2px solid #000;
+    }
+    
+    .schedule-table th {
+        background: #000 !important;
+        color: #fff !important;
+        -webkit-print-color-adjust: exact;
+    }
+    
+    body {
+        background: white !important;
+    }
+    
+    .container-fluid {
+        padding: 0 !important;
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .sidebar {
+        min-height: auto;
+        margin-bottom: 20px;
+    }
+    
+    .schedule-table td {
+        padding: 8px 4px;
+        height: 60px;
+        font-size: 0.8rem;
+    }
+    
+    .schedule-table .schedule-item {
+        font-size: 0.75rem;
+    }
+    
+    .schedule-table th {
+        padding: 8px 4px;
+        font-size: 0.8rem;
+    }
+    
+    .navbar-brand {
+        font-size: 0.9rem;
+    }
+    
+    .stat-card h4 {
+        font-size: 1.2rem;
+    }
+    
+    .stat-card p {
+        font-size: 0.8rem;
+    }
+}
+
+/* Loading Spinner */
+.loading-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid var(--accent-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Toast Notifications */
+.toast {
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.toast-header {
+    border-radius: 8px 8px 0 0;
+}
+
+/* Badges */
 .badge {
-    font-weight: 500;
-    padding: 0.4em 0.7em;
+    font-size: 0.7em;
+    padding: 4px 8px;
+    border-radius: 10px;
 }
 
-.badge.bg-primary {
-    background: linear-gradient(135deg, var(--secondary-color) 0%, #2980b9 100%) !important;
+/* Dropdown Menus */
+.dropdown-menu {
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.dropdown-item {
+    padding: 8px 16px;
+    transition: all 0.3s ease;
+}
+
+.dropdown-item:hover {
+    background-color: rgba(52, 152, 219, 0.1);
+}
+
+/* Form Switches */
+.form-check-input:checked {
+    background-color: var(--success-color);
+    border-color: var(--success-color);
 }
 
 /* Alert Styles */
@@ -416,342 +424,97 @@ body {
 }
 
 .alert-info {
-    border-left-color: var(--info-color);
-    background: linear-gradient(135deg, #d1ecf1 0%, #e8f4fc 100%);
-}
-
-.alert-success {
-    border-left-color: var(--success-color);
-    background: linear-gradient(135deg, #d4edda 0%, #e8f5e8 100%);
+    border-left-color: var(--accent-color);
 }
 
 .alert-warning {
     border-left-color: var(--warning-color);
-    background: linear-gradient(135deg, #fff3cd 0%, #fff9e6 100%);
+}
+
+.alert-success {
+    border-left-color: var(--success-color);
 }
 
 .alert-danger {
     border-left-color: var(--danger-color);
-    background: linear-gradient(135deg, #f8d7da 0%, #ffe6e6 100%);
 }
 
-/* Notification Styles */
-.notification {
-    position: fixed;
-    top: 90px;
-    right: 20px;
-    z-index: 9999;
-    min-width: 350px;
-    animation: slideInRight 0.3s ease;
-    border-radius: 8px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+/* Utility Classes */
+.text-gradient {
+    background: linear-gradient(135deg, var(--accent-color), var(--success-color));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 
-@keyframes slideInRight {
-    from {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
+.bg-gradient-primary {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color)) !important;
 }
 
-/* Progress Bar Styles */
-.progress {
-    height: 8px;
+.bg-gradient-accent {
+    background: linear-gradient(135deg, var(--accent-color), #2980b9) !important;
 }
 
-.progress-bar-striped {
-    background-image: linear-gradient(45deg, rgba(255, 255, 255, 0.15) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.15) 50%, rgba(255, 255, 255, 0.15) 75%, transparent 75%, transparent);
-    background-size: 1rem 1rem;
-}
-
-.progress-bar-animated {
-    animation: progress-bar-stripes 1s linear infinite;
-}
-
-@keyframes progress-bar-stripes {
-    0% {
-        background-position: 1rem 0;
-    }
-    100% {
-        background-position: 0 0;
-    }
-}
-
-/* Table Styles */
-.table-striped tbody tr:nth-of-type(odd) {
-    background-color: rgba(0, 0, 0, 0.02);
-}
-
-.table-hover tbody tr:hover {
-    background-color: rgba(0, 0, 0, 0.04);
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-    .sidebar {
-        min-height: auto;
-        margin-bottom: 1rem;
-    }
-    
-    .schedule-table {
-        font-size: 0.8rem;
-    }
-    
-    .schedule-table th, 
-    .schedule-table td {
-        padding: 0.4rem;
-    }
-    
-    .schedule-table .time-header {
-        width: 80px;
-        font-size: 0.75rem;
-    }
-    
-    .subject-cell div {
-        font-size: 0.75rem;
-    }
-    
-    .stat-card h4 {
-        font-size: 2rem;
-    }
-    
-    .notification {
-        min-width: 300px;
-        right: 10px;
-        left: 10px;
-    }
-    
-    .navbar-brand {
-        font-size: 1.1rem;
-    }
-    
-    .navbar-brand img {
-        height: 35px;
-    }
-}
-
-@media (max-width: 576px) {
-    .navbar-brand {
-        font-size: 1rem;
-    }
-    
-    .navbar-brand img {
-        height: 30px;
-    }
-    
-    .schedule-table {
-        font-size: 0.7rem;
-    }
-    
-    .schedule-table th, 
-    .schedule-table td {
-        padding: 0.3rem;
-    }
-    
-    .summary-card .card-body {
-        padding: 1rem;
-    }
-}
-
-/* Print styles */
-@media print {
-    .navbar, .sidebar, .btn, .modal, .alert, .no-print {
-        display: none !important;
-    }
-    
-    .container-fluid {
-        padding: 0 !important;
-    }
-    
-    .col-md-10 {
-        flex: 0 0 100%;
-        max-width: 100%;
-    }
-    
-    .schedule-table {
-        box-shadow: none;
-        border: 1px solid #000;
-    }
-    
-    .schedule-table th {
-        background: #f0f0f0 !important;
-        color: #000 !important;
-        -webkit-print-color-adjust: exact;
-    }
-    
-    body {
-        margin: 0;
-        color: #000;
-    }
-    
-    .navbar-brand img {
-        filter: grayscale(100%) brightness(0%);
-    }
-}
-
-/* Custom Scrollbar */
-.table-responsive::-webkit-scrollbar {
+/* Scrollbar Styling */
+::-webkit-scrollbar {
     width: 8px;
-    height: 8px;
 }
 
-.table-responsive::-webkit-scrollbar-track {
+::-webkit-scrollbar-track {
     background: #f1f1f1;
     border-radius: 4px;
 }
 
-.table-responsive::-webkit-scrollbar-thumb {
-    background: var(--secondary-color);
+::-webkit-scrollbar-thumb {
+    background: var(--accent-color);
     border-radius: 4px;
 }
 
-.table-responsive::-webkit-scrollbar-thumb:hover {
+::-webkit-scrollbar-thumb:hover {
     background: #2980b9;
 }
 
-/* Loading Animation */
-.loading {
+/* Animation for schedule updates */
+.schedule-update {
+    animation: highlight 2s ease;
+}
+
+@keyframes highlight {
+    0% { background-color: #fff3cd; }
+    100% { background-color: transparent; }
+}
+
+/* Teacher summary cards */
+.teacher-summary-card {
+    border-left: 4px solid var(--accent-color);
+}
+
+.class-summary-card {
+    border-left: 4px solid var(--success-color);
+}
+
+.room-summary-card {
+    border-left: 4px solid var(--warning-color);
+}
+
+/* Status indicators */
+.status-indicator {
     display: inline-block;
-    width: 20px;
-    height: 20px;
-    border: 3px solid rgba(255,255,255,.3);
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
-    border-top-color: #fff;
-    animation: spin 1s ease-in-out infinite;
+    margin-right: 5px;
 }
 
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
-
-/* Connection Status */
-#connectionStatus {
-    font-size: 0.85rem;
-}
-
-/* Edit Mode Alert */
-#editModeAlert {
-    margin-bottom: 1rem;
-}
-
-/* Icon Styles */
-.icon-lg {
-    font-size: 1.5rem;
-}
-
-/* Text Utilities */
-.text-small {
-    font-size: 0.85rem;
-}
-
-.text-xs {
-    font-size: 0.75rem;
-}
-
-/* Background Utilities */
-.bg-gradient-primary {
-    background: linear-gradient(135deg, var(--primary-color) 0%, #34495e 100%);
-}
-
-.bg-gradient-secondary {
-    background: linear-gradient(135deg, var(--secondary-color) 0%, #2980b9 100%);
-}
-
-/* Shadow Utilities */
-.shadow-sm {
-    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075) !important;
-}
-
-.shadow {
-    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
-}
-
-.shadow-lg {
-    box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.175) !important;
-}
-
-/* Troubleshooting Styles */
-.troubleshooting-tips {
-    margin-top: 1rem;
-}
-
-.troubleshooting-tips ol {
-    margin-bottom: 0.5rem;
-}
-
-/* Connection Status Styles */
-#connectionDetails p {
-    margin-bottom: 0.5rem;
-    font-size: 0.9rem;
-}
-
-#urlStatus {
-    font-family: monospace;
-    background: #f8f9fa;
-    padding: 2px 6px;
-    border-radius: 4px;
-    border: 1px solid #dee2e6;
-}
-
-/* Button Group Styles */
-.btn-group-vertical .btn {
-    margin-bottom: 0.5rem;
-}
-
-/* Card Improvements */
-.card {
-    border: none;
-    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-}
-
-.card-header {
-    font-weight: 600;
-}
-
-/* Form Improvements */
-.form-text {
-    font-size: 0.8rem;
-}
-
-/* Badge Improvements */
-.badge {
-    font-size: 0.75em;
-}
-
-/* Animation for connection status */
-.connection-pulse {
-    animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.5; }
-    100% { opacity: 1; }
-}
-
-/* Status colors for connection */
 .status-online {
-    color: var(--success-color);
+    background-color: var(--success-color);
 }
 
 .status-offline {
-    color: var(--danger-color);
+    background-color: var(--danger-color);
 }
 
-.status-warning {
-    color: var(--warning-color);
-}
-
-/* Tool improvements */
-.tool-card {
-    transition: all 0.3s ease;
-}
-
-.tool-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+.status-syncing {
+    background-color: var(--warning-color);
+    animation: pulse 1.5s infinite;
 }
