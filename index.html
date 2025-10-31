@@ -775,113 +775,23 @@
         </div>
     </div>
 
-    <!-- Import/Export Modal -->
-    <div class="modal fade" id="importExportModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="importExportTitle">นำเข้า/ส่งออกข้อมูล</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-4">
-                        <h6><i class="fas fa-download me-1"></i>ส่งออกข้อมูล</h6>
-                        <div class="d-grid gap-2">
-                            <button class="btn btn-outline-primary" id="exportTeachers">
-                                <i class="fas fa-user me-1"></i> ส่งออกข้อมูลครู
-                            </button>
-                            <button class="btn btn-outline-primary" id="exportSubjects">
-                                <i class="fas fa-book me-1"></i> ส่งออกข้อมูลรายวิชา
-                            </button>
-                            <button class="btn btn-outline-primary" id="exportRooms">
-                                <i class="fas fa-door-open me-1"></i> ส่งออกข้อมูลห้อง
-                            </button>
-                            <button class="btn btn-outline-primary" id="exportClasses">
-                                <i class="fas fa-users me-1"></i> ส่งออกข้อมูลระดับชั้น
-                            </button>
-                            <button class="btn btn-outline-primary" id="exportSchedule">
-                                <i class="fas fa-calendar me-1"></i> ส่งออกข้อมูลตารางเรียน
-                            </button>
-                            <button class="btn btn-primary" id="exportAll">
-                                <i class="fas fa-database me-1"></i> ส่งออกข้อมูลทั้งหมด
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <h6><i class="fas fa-upload me-1"></i>นำเข้าข้อมูล</h6>
-                        <div class="mb-3">
-                            <label for="importFile" class="form-label">เลือกไฟล์ JSON</label>
-                            <input class="form-control" type="file" id="importFile" accept=".json">
-                        </div>
-                        <div class="form-check mb-3">
-                            <input class="form-check-input" type="checkbox" id="replaceData">
-                            <label class="form-check-label" for="replaceData">
-                                แทนที่ข้อมูลเดิมทั้งหมด
-                            </label>
-                        </div>
-                        <div class="d-grid">
-                            <button class="btn btn-warning" id="importDataBtn">
-                                <i class="fas fa-file-import me-1"></i> นำเข้าข้อมูล
-                            </button>
-                        </div>
-                    </div>
-                </div>
+    <!-- Toast Container -->
+    <div class="toast-container position-fixed top-0 end-0 p-3">
+        <div id="liveToast" class="toast" role="alert">
+            <div class="toast-header">
+                <i class="fas fa-info-circle me-2 text-primary"></i>
+                <strong class="me-auto">ระบบ</strong>
+                <small>ขณะนี้</small>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
             </div>
-        </div>
-    </div>
-
-    <!-- Google Sheets Setup Modal -->
-    <div class="modal fade" id="googleSheetsModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">การตั้งค่า Google Sheets</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="alert alert-info">
-                        <h6><i class="fas fa-info-circle me-1"></i>คำแนะนำในการตั้งค่า</h6>
-                        <ol class="mb-0">
-                            <li>สร้าง Google Sheet ใหม่</li>
-                            <li>เปิด Apps Script จากเมนู Extensions</li>
-                            <li>แทนที่โค้ดด้วยไฟล์จากโฟลเดอร์ google-sheets-setup</li>
-                            <li>Deploy เป็น Web App</li>
-                            <li>คัดลอก URL มาใส่ในช่องด้านล่าง</li>
-                        </ol>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="scriptUrlModal" class="form-label">Google Apps Script URL</label>
-                        <input type="text" class="form-control" id="scriptUrlModal" placeholder="https://script.google.com/macros/s/...">
-                    </div>
-                    
-                    <div class="d-grid gap-2">
-                        <button class="btn btn-success" id="saveScriptUrlModal">
-                            <i class="fas fa-save me-1"></i> บันทึก URL
-                        </button>
-                        <button class="btn btn-primary" id="testConnectionModal">
-                            <i class="fas fa-plug me-1"></i> ทดสอบการเชื่อมต่อ
-                        </button>
-                        <button class="btn btn-warning" id="initializeSheetsModal">
-                            <i class="fas fa-cog me-1"></i> เริ่มต้นระบบ Sheets
-                        </button>
-                        <button class="btn btn-info" id="syncToSheetsModal">
-                            <i class="fas fa-cloud-upload me-1"></i> อัพโหลดข้อมูลไปยัง Google Sheets
-                        </button>
-                        <button class="btn btn-info" id="syncToSheetsBatchModal">
-                            <i class="fas fa-cloud-upload-alt me-1"></i> อัพโหลดข้อมูลแบบแบ่งชุด
-                        </button>
-                        <button class="btn btn-warning" id="loadFromSheetsModal">
-                            <i class="fas fa-cloud-download me-1"></i> โหลดข้อมูลจาก Google Sheets
-                        </button>
-                    </div>
-                </div>
+            <div class="toast-body" id="toastMessage">
+                ข้อความ
             </div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
