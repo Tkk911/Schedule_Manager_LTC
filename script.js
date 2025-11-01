@@ -1,5 +1,5 @@
 // ระบบจัดการตารางเรียนและตารางสอน - JavaScript หลัก
-// Version: 3.4.0 - Added admin-only system info and improved print headers
+// Version: 3.4.1 - Auto-load from Google Sheets and improved login flow
 // Sheet ID: 1fUothdjvvd8A9Gf_uW4WWpsnABxmet2sK0egxHstIJo
 
 // Global variables
@@ -9,7 +9,7 @@ let teacherData = {};
 let subjectData = {};
 let roomData = {};
 let classData = {};
-let googleSheetsUrl = '';
+let googleSheetsUrl = 'https://script.google.com/macros/s/AKfycbwAfpgczPr3doyUeU8wonDty7lt3fk_YhemfoA7j5C2YVYi6O693OVpDpJ4MPg1JR-BoQ/exec';
 let onlineMode = true;
 
 // Data management functions
@@ -447,7 +447,7 @@ class DataManager {
                         roomData,
                         classData,
                         exportDate: new Date().toISOString(),
-                        version: '3.4.0'
+                        version: '3.4.1'
                     };
                     filename = `schedule_system_backup_${this.getTimestamp()}.json`;
                     break;
@@ -2062,8 +2062,7 @@ class PrintManager {
                     <body>
                         <div class="header">
                             <div class="school-name">วิทยาลัยเทคโนโลยีแหลมทอง</div>
-                            <div class="schedule-title">${title}</div>
-                            ${classInfo}
+                            <div class="schedule-title">${title}</div>                            
                             <div class="print-date">พิมพ์เมื่อ: ${new Date().toLocaleDateString('th-TH')}</div>
                         </div>
                         ${currentView.querySelector('.table-responsive')?.innerHTML || currentView.innerHTML}
@@ -2782,6 +2781,19 @@ function login() {
     updateEditMode();
     updateViewVisibility();
     ScheduleRenderer.renderAllViews();
+    
+    // ซ่อนข้อความ username/password hint
+    const hintElement = document.querySelector('.mt-2.text-center');
+    if (hintElement) {
+        hintElement.style.display = 'none';
+    }
+    
+    // ปิดโมดัลล็อคอิน
+    const loginModal = bootstrap.Modal.getInstance(document.getElementById('loginModal'));
+    if (loginModal) {
+        loginModal.hide();
+    }
+    
     showNotification('เข้าสู่ระบบผู้ดูแลสำเร็จ', 'success');
 }
 
