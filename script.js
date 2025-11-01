@@ -2534,7 +2534,7 @@ function setupEventListeners() {
         const username = document.getElementById('username').value;
         const password = document.getElementById('password').value;
         
-        if (username === 'admin' && password === 'admin') {
+        if (username === 'tkk911' && password === '4520261225') {
             login();
         } else {
             showNotification('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', 'error');
