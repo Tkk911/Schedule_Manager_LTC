@@ -1,5 +1,5 @@
 // ระบบจัดการตารางเรียนและตารางสอน - JavaScript หลัก
-// Version: 3.3.0 - Fixed "Failed to fetch" error and improved error handling
+// Version: 3.4.0 - Added admin-only system info and improved print headers
 // Sheet ID: 1fUothdjvvd8A9Gf_uW4WWpsnABxmet2sK0egxHstIJo
 
 // Global variables
@@ -447,7 +447,7 @@ class DataManager {
                         roomData,
                         classData,
                         exportDate: new Date().toISOString(),
-                        version: '3.3.0'
+                        version: '3.4.0'
                     };
                     filename = `schedule_system_backup_${this.getTimestamp()}.json`;
                     break;
@@ -1950,7 +1950,37 @@ class PrintManager {
         
         if (currentView) {
             const printWindow = window.open('', '_blank');
-            const title = currentView.querySelector('h3')?.textContent || 'ตารางเรียน';
+            let title = currentView.querySelector('h3')?.textContent || 'ตารางเรียน';
+            let classInfo = '';
+            
+            // ตรวจสอบว่าเป็นตารางเรียนของชั้นเรียนหรือไม่
+            if (currentView.id === 'class-schedule') {
+                const classSelect = document.getElementById('classSelect');
+                const selectedClass = classSelect ? classSelect.value : Object.keys(classData)[0];
+                const classDataItem = classData[selectedClass];
+                
+                if (classDataItem) {
+                    classInfo = `<h4>${classDataItem.name}</h4>`;
+                    title = `ตารางเรียน - ${classDataItem.name}`;
+                }
+            } else if (currentView.id === 'teacher-schedule') {
+                const teacherSelect = document.getElementById('teacherSelect');
+                const selectedTeacher = teacherSelect ? teacherSelect.value : Object.values(teacherData)[0]?.name;
+                
+                if (selectedTeacher) {
+                    classInfo = `<h4>ครูผู้สอน: ${selectedTeacher}</h4>`;
+                    title = `ตารางสอนครู - ${selectedTeacher}`;
+                }
+            } else if (currentView.id === 'room-schedule') {
+                const roomSelect = document.getElementById('roomSelect');
+                const selectedRoom = roomSelect ? roomSelect.value : Object.values(roomData)[0]?.code;
+                const roomDataItem = roomData[selectedRoom];
+                
+                if (roomDataItem) {
+                    classInfo = `<h4>ห้อง: ${roomDataItem.name}</h4>`;
+                    title = `ตารางการใช้ห้อง - ${roomDataItem.name}`;
+                }
+            }
             
             printWindow.document.write(`
                 <html>
@@ -1962,6 +1992,31 @@ class PrintManager {
                                 font-family: 'Sarabun', sans-serif; 
                                 margin: 20px;
                                 color: #333;
+                            }
+                            .header {
+                                text-align: center;
+                                margin-bottom: 20px;
+                                border-bottom: 2px solid #333;
+                                padding-bottom: 15px;
+                            }
+                            .school-name {
+                                font-size: 24px;
+                                font-weight: bold;
+                                margin-bottom: 5px;
+                            }
+                            .schedule-title {
+                                font-size: 20px;
+                                margin-bottom: 10px;
+                                color: #2c3e50;
+                            }
+                            .class-info {
+                                font-size: 18px;
+                                margin-bottom: 10px;
+                                color: #3498db;
+                            }
+                            .print-date {
+                                font-size: 14px;
+                                color: #666;
                             }
                             table { 
                                 width: 100%; 
@@ -1982,12 +2037,6 @@ class PrintManager {
                                 background-color: #ffe6e6; 
                                 font-weight: bold;
                             }
-                            .home-room { 
-                                background-color: #e6ffe6; 
-                            }
-                            .activity { 
-                                background-color: #fff9e6; 
-                            }
                             .day-header {
                                 background-color: #2c3e50;
                                 color: white;
@@ -1997,10 +2046,6 @@ class PrintManager {
                                 background-color: #3498db;
                                 color: white;
                                 font-weight: bold;
-                            }
-                            .header {
-                                text-align: center;
-                                margin-bottom: 20px;
                             }
                             .footer {
                                 text-align: center;
@@ -2016,14 +2061,14 @@ class PrintManager {
                     </head>
                     <body>
                         <div class="header">
-                            <h2>วิทยาลัยเทคโนโลยีแหลมทอง</h2>
-                            <h3>${title}</h3>                      
-
-                            <p>พิมพ์เมื่อ: ${new Date().toLocaleDateString('th-TH')}</p>
-			</div>
+                            <div class="school-name">วิทยาลัยเทคโนโลยีแหลมทอง</div>
+                            <div class="schedule-title">${title}</div>
+                            ${classInfo}
+                            <div class="print-date">พิมพ์เมื่อ: ${new Date().toLocaleDateString('th-TH')}</div>
+                        </div>
                         ${currentView.querySelector('.table-responsive')?.innerHTML || currentView.innerHTML}
                         <div class="footer">
-                            <p>ระบบจัดการตารางเรียนและตารางสอนกลุ่มงานไฟฟ้าและเล็กทรอนิกส์ - Printed from Schedule Management System</p>
+                            <p>ระบบจัดการตารางเรียนและตารางสอนกลุ่มงานไฟฟ้าและอิเล็กทรอนิกส์</p>
                         </div>
                     </body>
                 </html>
@@ -2105,7 +2150,30 @@ function hideProgress() {
     }
 }
 
+// ฟังก์ชันจัดการการแสดงผลแทปตามสิทธิ์ผู้ใช้
+function updateViewVisibility() {
+    const systemInfoNavItem = document.querySelector('.nav-link[data-view="system-info"]').parentElement;
+    
+    if (isAdmin) {
+        systemInfoNavItem.style.display = 'block';
+    } else {
+        systemInfoNavItem.style.display = 'none';
+        
+        // ถ้าผู้ใช้กำลังดูแทปข้อมูลระบบ ให้เปลี่ยนไปที่แทปตารางเรียน
+        const currentView = document.querySelector('.view-content:not(.d-none)');
+        if (currentView && currentView.id === 'system-info') {
+            showView('class-schedule');
+        }
+    }
+}
+
 function showView(viewId) {
+    // ตรวจสอบสิทธิ์การเข้าถึง
+    if (viewId === 'system-info' && !isAdmin) {
+        showNotification('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'error');
+        return;
+    }
+    
     // Hide all views
     document.querySelectorAll('.view-content').forEach(view => {
         view.classList.add('d-none');
@@ -2121,7 +2189,11 @@ function showView(viewId) {
     document.querySelectorAll('.sidebar .nav-link').forEach(item => {
         item.classList.remove('active');
     });
-    document.querySelector(`.sidebar .nav-link[data-view="${viewId}"]`).classList.add('active');
+    
+    const navLink = document.querySelector(`.sidebar .nav-link[data-view="${viewId}"]`);
+    if (navLink) {
+        navLink.classList.add('active');
+    }
     
     // Render specific content
     switch (viewId) {
@@ -2366,6 +2438,7 @@ function enableAdminMode() {
     isAdmin = true;
     localStorage.setItem('isAdmin', 'true');
     updateEditMode();
+    updateViewVisibility();
     ScheduleRenderer.renderAllViews();
     showNotification('เปิดโหมดผู้ดูแลระบบเรียบร้อยแล้ว', 'success');
 }
@@ -2410,8 +2483,9 @@ function initializeApp() {
         isAdmin = true;
     }
     
-    // Update edit mode (สำคัญ!)
+    // Update edit mode และการแสดงผลแทป
     updateEditMode();
+    updateViewVisibility();
     
     // Render management tables
     TeacherManager.renderTeacherTable();
@@ -2426,7 +2500,8 @@ function initializeApp() {
                 if (result.success) {
                     showNotification('โหลดข้อมูลจาก Google Sheets สำเร็จ', 'success');
                     ScheduleRenderer.renderAllViews();
-                    updateEditMode(); // อัพเดทโหมดแก้ไขหลังจากโหลดข้อมูล
+                    updateEditMode();
+                    updateViewVisibility();
                 }
             });
         }, 1000);
@@ -2461,16 +2536,7 @@ function setupEventListeners() {
         const password = document.getElementById('password').value;
         
         if (username === 'admin' && password === 'admin') {
-            isAdmin = true;
-            localStorage.setItem('isAdmin', 'true');
-            updateEditMode();
-            
-            const loginModal = bootstrap.Modal.getInstance(document.getElementById('loginModal'));
-            loginModal.hide();
-            
-            ScheduleRenderer.renderClassSchedule();
-            
-            showNotification('เข้าสู่ระบบผู้ดูแลสำเร็จ', 'success');
+            login();
         } else {
             showNotification('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', 'error');
         }
@@ -2710,10 +2776,20 @@ function setupEventListeners() {
     document.getElementById('reloadData').addEventListener('click', reloadData);
 }
 
+function login() {
+    isAdmin = true;
+    localStorage.setItem('isAdmin', 'true');
+    updateEditMode();
+    updateViewVisibility();
+    ScheduleRenderer.renderAllViews();
+    showNotification('เข้าสู่ระบบผู้ดูแลสำเร็จ', 'success');
+}
+
 function logout() {
     isAdmin = false;
     localStorage.removeItem('isAdmin');
     updateEditMode();
+    updateViewVisibility();
     ScheduleRenderer.renderAllViews();
     showNotification('ออกจากระบบสำเร็จ', 'success');
 }
