@@ -9,7 +9,7 @@ let teacherData = {};
 let subjectData = {};
 let roomData = {};
 let classData = {};
-let googleSheetsUrl = 'https://script.google.com/macros/s/AKfycbwAfpgczPr3doyUeU8wonDty7lt3fk_YhemfoA7j5C2YVYi6O693OVpDpJ4MPg1JR-BoQ/exec';
+let googleSheetsUrl = 'https://script.google.com/macros/s/AKfycbzzTmVBC-tf92F30pCM4q87z3X_yggGmv7uOaMmBTNtveZD_K0NZTAgEFZivN8QMZqpSQ/exec';
 let onlineMode = true;
 
 // Data management functions
