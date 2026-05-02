@@ -1319,9 +1319,9 @@ class ScheduleRenderer {
                 const cell = document.createElement('td');
                 
                 // จัดการคาบพิเศษสำหรับวันศุกร์
-                if (day === 'ศุกร์' && period === 7) {
+                if (day === 'พุธ' && period === 7) {
                     cell.classList.add('activity');
-                    cell.innerHTML = '<div><strong>กิจกรรม</strong></div>';
+                    cell.innerHTML = '<div><strong>กิจกรรมพํฒนาผู้เรียน</strong></div>';
                     row.appendChild(cell);
                     return;
                 }
@@ -1391,9 +1391,9 @@ class ScheduleRenderer {
             periods.forEach(period => {
                 const cell = document.createElement('td');
                 
-                if (day === 'ศุกร์' && period === 7) {
+                if (day === 'พุธ' && period === 7) {
                     cell.classList.add('activity');
-                    cell.innerHTML = '<div><strong>กิจกรรม</strong></div>';
+                    cell.innerHTML = '<div><strong>กิจกรรมพํฒนาผู้เรียน</strong></div>';
                     row.appendChild(cell);
                     return;
                 }
@@ -1450,9 +1450,9 @@ class ScheduleRenderer {
             periods.forEach(period => {
                 const cell = document.createElement('td');
                 
-                if (day === 'ศุกร์' && period === 7) {
+                if (day === 'พุธ' && period === 7) {
                     cell.classList.add('activity');
-                    cell.innerHTML = '<div><strong>กิจกรรม</strong></div>';
+                    cell.innerHTML = '<div><strong>กิจกรรมพํฒนาผู้เรียน</strong></div>';
                     row.appendChild(cell);
                     return;
                 }
