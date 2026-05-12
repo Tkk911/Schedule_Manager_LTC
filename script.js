@@ -1321,7 +1321,7 @@ class ScheduleRenderer {
                 // จัดการคาบพิเศษสำหรับวันศุกร์
                 if (day === 'พุธ' && period === 7) {
                     cell.classList.add('activity');
-                    cell.innerHTML = '<div><strong>กิจกรรมพํฒนาผู้เรียน</strong></div>';
+                    cell.innerHTML = '<div><strong>กิจกรรมพัฒนาผู้เรียน</strong></div>';
                     row.appendChild(cell);
                     return;
                 }
@@ -1393,7 +1393,7 @@ class ScheduleRenderer {
                 
                 if (day === 'พุธ' && period === 7) {
                     cell.classList.add('activity');
-                    cell.innerHTML = '<div><strong>กิจกรรมพํฒนาผู้เรียน</strong></div>';
+                    cell.innerHTML = '<div><strong>กิจกรรมพัฒนาผู้เรียน</strong></div>';
                     row.appendChild(cell);
                     return;
                 }
@@ -1452,7 +1452,7 @@ class ScheduleRenderer {
                 
                 if (day === 'พุธ' && period === 7) {
                     cell.classList.add('activity');
-                    cell.innerHTML = '<div><strong>กิจกรรมพํฒนาผู้เรียน</strong></div>';
+                    cell.innerHTML = '<div><strong>กิจกรรมพัฒนาผู้เรียน</strong></div>';
                     row.appendChild(cell);
                     return;
                 }
